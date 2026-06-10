@@ -1,0 +1,10 @@
+#Archivos de configuracion
+.env
+.ENV
+credentials.json
+*.json
+
+# Carpetas de entorno virtual
+.venv/
+venv/
+env/
