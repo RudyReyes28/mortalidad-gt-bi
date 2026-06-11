@@ -18,6 +18,7 @@ TABLAS_PERMITIDAS = {
     "ine":  "sandbox_ine",
     "oms": "sandbox_oms",
     "centroamerica": "sandbox_centroamerica",
+    "world_mortality": "sandbox_world_mortality",
     "fuente_db":"sandbox_fuente_db",
 }
 
@@ -63,9 +64,9 @@ def load_sandbox(df: pd.DataFrame, fuente: str, db_url: str) -> dict:
             f"Valores válidos: {list(TABLAS_PERMITIDAS.keys())}"
         )
 
-    tabla      = TABLAS_PERMITIDAS[fuente]
+    tabla  = TABLAS_PERMITIDAS[fuente]
     tabla_full = f"sandbox.{tabla}"       # schema.tabla
-    inicio     = datetime.now()
+    inicio  = datetime.now()
 
     logger.info("=" * 60)
     logger.info(f"INICIO — Carga Sandbox")

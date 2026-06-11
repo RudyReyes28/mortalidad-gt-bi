@@ -55,7 +55,7 @@ sys.path.insert(0, str(LOADERS))
 
 #  Importar modulos del pipeline 
 from extractors.extract_gdrive import extract_gdrive
-
+from extractors.extract_world_mortality_s3 import extract_world_mortality_s3
 # PENDIENTE — descomenta cuando se implemente el extractor
 # from extractors.extract_s3         import extract_s3
 # from extractors.extract_sharepoint import extract_sharepoint
@@ -77,12 +77,12 @@ def _cargar_config() -> dict:
         "sandbox_url": os.getenv("SANDBOX_DB_URL"),
 
         # Descomentar cuando se active cada fuente
-        # AWS S3 — Centroamérica
-        # "aws_access_key": os.getenv("AWS_ACCESS_KEY_ID"),
-        # "aws_secret_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
-        # "aws_region": os.getenv("AWS_REGION", "us-east-1"),
-        # "s3_bucket": os.getenv("S3_BUCKET_NAME"),
-        # "s3_prefix": os.getenv("S3_PREFIX", "raw/centroamerica/"),
+        # AWS S3
+        "aws_access_key": os.getenv("AWS_ACCESS_KEY_ID"),
+        "aws_secret_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
+        "aws_region": os.getenv("AWS_REGION", "us-east-1"),
+        "s3_bucket": os.getenv("S3_BUCKET_NAME"),
+        "s3_prefix": os.getenv("S3_PREFIX", "raw/centroamerica/"),
 
         # SharePoint — OMS/MSPAS
         # "sp_url":  os.getenv("SHAREPOINT_URL"),
@@ -97,7 +97,7 @@ def _cargar_config() -> dict:
     # Validar solo las obligatorias de fuentes activas
     obligatorias = {
         "gdrive_credentials": "GDRIVE_CREDENTIALS_PATH",
-        "sandbox_url":        "SANDBOX_DB_URL",
+        "sandbox_url": "SANDBOX_DB_URL",
     }
     faltantes = [var for key, var in obligatorias.items() if not config[key]]
     if faltantes:
@@ -128,6 +128,19 @@ def _construir_fuentes(config: dict) -> dict:
         "descripcion": "INE — Estadísticas vitales de defunciones (Google Drive)",
         "extractor": extract_gdrive,
         "kwargs": {"ruta_credenciales": config["gdrive_credentials"]},
+    }
+
+    # ACTIVO - WORLD MORTALITY DESDE S3
+    fuentes["world_mortality"] = {
+        "descripcion": "World Mortality Dataset (AWS S3)",
+        "extractor": extract_world_mortality_s3,
+        "kwargs": {
+            "bucket": config["s3_bucket"],
+            "prefix": config["s3_prefix"],
+            "aws_key": config["aws_access_key"],
+            "aws_secret": config["aws_secret_key"],
+            "region": config["aws_region"],
+        },
     }
 
     # PENDIENTE — Centroamérica desde S3
@@ -291,7 +304,7 @@ if __name__ == "__main__":
         "--fuente",
         type=str,
         nargs="+",
-        choices=["ine"],   #  agrega aquí cada fuente cuando se active
+        choices=["ine", "world_mortality"],   #  agrega aquí cada fuente cuando se active
         help="Fuente(s) específica(s) a correr. Sin argumento corre todas las activas.",
         default=None,
     )
