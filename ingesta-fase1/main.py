@@ -56,6 +56,8 @@ sys.path.insert(0, str(LOADERS))
 #  Importar modulos del pipeline 
 from extractors.extract_gdrive import extract_gdrive
 from extractors.extract_world_mortality_s3 import extract_world_mortality_s3
+from extractors.extract_mspas_mec import extract_mspas_mec
+from extractors.extract_mspas_covid import extract_mspas_covid
 # PENDIENTE — descomenta cuando se implemente el extractor
 # from extractors.extract_s3         import extract_s3
 # from extractors.extract_sharepoint import extract_sharepoint
@@ -155,6 +157,20 @@ def _construir_fuentes(config: dict) -> dict:
     #         "region": config["aws_region"],
     #     },
     # }
+
+    # ACTIVO — MSPAS Enfermedades Crónicas (MEC) desde Google Drive (CSV)
+    fuentes["mspas_mec"] = {
+        "descripcion": "MSPAS — Enfermedades Crónicas MEC 2012-2024 (Google Drive / CSV)",
+        "extractor": extract_mspas_mec,
+        "kwargs": {"ruta_credenciales": config["gdrive_credentials"]},
+    }
+
+    # ACTIVO — MSPAS Fallecidos COVID-19 desde Google Drive (CSV)
+    fuentes["mspas_covid"] = {
+        "descripcion": "MSPAS — Fallecidos COVID-19 por municipio 2020-2024 (Google Drive / CSV)",
+        "extractor": extract_mspas_covid,
+        "kwargs": {"ruta_credenciales": config["gdrive_credentials"]},
+    }
 
     #PENDIENTE  — OMS/MSPAS desde SharePoint
     # fuentes["oms"] = {
@@ -304,7 +320,7 @@ if __name__ == "__main__":
         "--fuente",
         type=str,
         nargs="+",
-        choices=["ine", "world_mortality"],   #  agrega aquí cada fuente cuando se active
+        choices=["ine", "world_mortality", "mspas_mec", "mspas_covid"],   #  agrega aquí cada fuente cuando se active
         help="Fuente(s) específica(s) a correr. Sin argumento corre todas las activas.",
         default=None,
     )

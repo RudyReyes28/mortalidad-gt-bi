@@ -1,4 +1,3 @@
-
 import logging
 from datetime import datetime
 
@@ -15,11 +14,14 @@ logger = logging.getLogger("loader.sandbox")
 
 # Tablas válidas por fuente 
 TABLAS_PERMITIDAS = {
-    "ine":  "sandbox_ine",
-    "oms": "sandbox_oms",
-    "centroamerica": "sandbox_centroamerica",
-    "world_mortality": "sandbox_world_mortality",
-    "fuente_db":"sandbox_fuente_db",
+    "ine":              "sandbox_ine",
+    "oms":              "sandbox_oms",
+    "centroamerica":    "sandbox_centroamerica",
+    "world_mortality":  "sandbox_world_mortality",
+    "fuente_db":        "sandbox_fuente_db",
+    # MSPAS — fuentes Eiler
+    "mspas_mec":        "sandbox_mspas_mec",        # Enfermedades crónicas 2012-2024
+    "mspas_covid":      "sandbox_mspas_covid",       # Fallecidos COVID-19 2020-2024
 }
 
 
