@@ -1,0 +1,29 @@
+site_name: Documentación fase 1 - Extracción y Carga a Sandbox
+site_description: Proyecto PNUD — Análisis Pre/Post COVID Guatemala
+site_author: Equipo SS2
+
+theme:
+  name: material          
+  language: es
+  palette:
+    primary: blue
+    accent: cyan
+  features:
+    - navigation.tabs     
+    - navigation.sections 
+    - toc.integrate       
+
+nav:
+  - Inicio: index.md
+  - Fuentes de Datos:
+    - INE Guatemala: fuentes/ine.md
+    - World Mortality Dataset: fuentes/world-mortality.md
+    - Centroamérica: fuentes/centroamerica.md
+  - Pipeline:
+    - Arquitectura: pipeline/arquitectura.md
+    - Ingesta: pipeline/ingesta.md
+  - Trazabilidad:
+    - Data Lineage: trazabilidad/data-lineage.md
+    - Solicitud RENAP: trazabilidad/renap/solicitud.md
+  - Diccionario de Datos: diccionario/sandbox.md
+  - Plan de Anonimización: anonimizacion/plan.md
