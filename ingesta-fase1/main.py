@@ -67,10 +67,9 @@ sys.path.insert(0, str(LOADERS))
 from extractors.extract_gdrive import extract_gdrive
 from extractors.extract_world_mortality_s3 import extract_world_mortality_s3
 from extractors.extract_sharepoint import extract_sharepoint 
-# PENDIENTE — descomenta cuando se implemente el extractor
-# from extractors.extract_s3         import extract_s3
-# from extractors.extract_sharepoint import extract_sharepoint
-# from extractors.extract_rds        import extract_rds
+from extractors.extract_mspas_mec import extract_mspas_mec
+from extractors.extract_mspas_covid import extract_mspas_covid
+from extractors.extract_centroamerica_rds import extract_rds
 
 from loaders.load_sandbox import load_sandbox
 
@@ -86,7 +85,6 @@ def _cargar_config() -> dict:
 
         # Sandbox destino (siempre obligatorio)
         "sandbox_url": os.getenv("SANDBOX_DB_URL"),
-        #print("DEBUG CONFIG DESDE .ENV:", config),
         # Descomentar cuando se active cada fuente
         # AWS S3
         "aws_access_key": os.getenv("AWS_ACCESS_KEY_ID"),
@@ -107,12 +105,13 @@ def _cargar_config() -> dict:
 
     # Validar solo las obligatorias de fuentes activas
     obligatorias = {
-        #"gdrive_credentials": "GDRIVE_CREDENTIALS_PATH",
         "sandbox_url": "SANDBOX_DB_URL",
         "sp_url": "SHAREPOINT_URL",
         "sp_user": "SHAREPOINT_USER",
         "sp_password": "SHAREPOINT_PASSWORD",
         "sp_folder": "SHAREPOINT_FOLDER"
+        "gdrive_credentials": "GDRIVE_CREDENTIALS_PATH",
+        "sandbox_url": "SANDBOX_DB_URL",
     }
     faltantes = [var for key, var in obligatorias.items() if not config[key]]
     if faltantes:
@@ -189,6 +188,26 @@ def _construir_fuentes(config: dict) -> dict:
     #     "extractor": extract_rds,
     #     "kwargs": {"db_url": config["rds_url"]},
     # }
+    # ACTIVO — MSPAS Enfermedades Crónicas (MEC) desde Google Drive (CSV)
+    fuentes["mspas_mec"] = {
+        "descripcion": "MSPAS — Enfermedades Crónicas MEC 2012-2024 (Google Drive / CSV)",
+        "extractor": extract_mspas_mec,
+        "kwargs": {"ruta_credenciales": config["gdrive_credentials"]},
+    }
+
+    # ACTIVO — MSPAS Fallecidos COVID-19 desde Google Drive (CSV)
+    fuentes["mspas_covid"] = {
+        "descripcion": "MSPAS — Fallecidos COVID-19 por municipio 2020-2024 (Google Drive / CSV)",
+        "extractor": extract_mspas_covid,
+        "kwargs": {"ruta_credenciales": config["gdrive_credentials"]},
+    }
+
+    #ACTIVA  — Fuente adicional desde RDS
+    fuentes["centroamerica"] = {
+         "descripcion": "Fuente adicional (RDS relacional)",
+         "extractor": extract_rds,
+         "kwargs": {"db_url": config["rds_url"]},
+     }
 
     return fuentes
 
@@ -276,7 +295,7 @@ def run_pipeline(fuentes_a_correr: list = None):
             reporte_global["resumen"]["total_filas"]+= reporte["filas_cargadas"]
 
         except Exception as e:
-            logger.error(f"  ✗ Error en fuente '{clave}': {e}")
+            logger.error(f"  Error en fuente '{clave}': {e}")
             reporte_global["fuentes"][clave] = {
                 "fuente": clave,
                 "status": "ERROR",
@@ -319,7 +338,7 @@ if __name__ == "__main__":
         "--fuente",
         type=str,
         nargs="+",
-        choices=["ine", "world_mortality", "oms"],   #  agrega aquí cada fuente cuando se active
+        choices=["ine", "world_mortality", "mspas_mec", "mspas_covid", "centroamerica", "oms"],   #  agrega aquí cada fuente cuando se active
         help="Fuente(s) específica(s) a correr. Sin argumento corre todas las activas.",
         default=None,
     )
