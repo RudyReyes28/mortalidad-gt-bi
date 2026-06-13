@@ -58,10 +58,9 @@ from extractors.extract_gdrive import extract_gdrive
 from extractors.extract_world_mortality_s3 import extract_world_mortality_s3
 from extractors.extract_mspas_mec import extract_mspas_mec
 from extractors.extract_mspas_covid import extract_mspas_covid
+from extractors.extract_centroamerica_rds import extract_rds
 # PENDIENTE — descomenta cuando se implemente el extractor
-# from extractors.extract_s3         import extract_s3
 # from extractors.extract_sharepoint import extract_sharepoint
-# from extractors.extract_rds        import extract_rds
 
 from loaders.load_sandbox import load_sandbox
 
@@ -93,7 +92,7 @@ def _cargar_config() -> dict:
         # "sp_folder": os.getenv("SHAREPOINT_FOLDER"),
 
         # RDS fuente adicional
-        # "rds_url": os.getenv("RDS_SOURCE_URL"),
+        "rds_url": os.getenv("RDS_SOURCE_URL"),
     }
 
     # Validar solo las obligatorias de fuentes activas
@@ -145,19 +144,6 @@ def _construir_fuentes(config: dict) -> dict:
         },
     }
 
-    # PENDIENTE — Centroamérica desde S3
-    # fuentes["centroamerica"] = {
-    #     "descripcion": "Fuente centroamericana (AWS S3)",
-    #     "extractor":   extract_s3,
-    #     "kwargs": {
-    #         "bucket": config["s3_bucket"],
-    #         "prefix": config["s3_prefix"],
-    #         "aws_key": config["aws_access_key"],
-    #         "aws_secret": config["aws_secret_key"],
-    #         "region": config["aws_region"],
-    #     },
-    # }
-
     # ACTIVO — MSPAS Enfermedades Crónicas (MEC) desde Google Drive (CSV)
     fuentes["mspas_mec"] = {
         "descripcion": "MSPAS — Enfermedades Crónicas MEC 2012-2024 (Google Drive / CSV)",
@@ -184,12 +170,12 @@ def _construir_fuentes(config: dict) -> dict:
     #     },
     # }
 
-    #PENDIENTE  — Fuente adicional desde RDS
-    # fuentes["fuente_db"] = {
-    #     "descripcion": "Fuente adicional (RDS relacional)",
-    #     "extractor": extract_rds,
-    #     "kwargs": {"db_url": config["rds_url"]},
-    # }
+    #ACTIVA  — Fuente adicional desde RDS
+    fuentes["centroamerica"] = {
+         "descripcion": "Fuente adicional (RDS relacional)",
+         "extractor": extract_rds,
+         "kwargs": {"db_url": config["rds_url"]},
+     }
 
     return fuentes
 
@@ -277,7 +263,7 @@ def run_pipeline(fuentes_a_correr: list = None):
             reporte_global["resumen"]["total_filas"]+= reporte["filas_cargadas"]
 
         except Exception as e:
-            logger.error(f"  ✗ Error en fuente '{clave}': {e}")
+            logger.error(f"  Error en fuente '{clave}': {e}")
             reporte_global["fuentes"][clave] = {
                 "fuente": clave,
                 "status": "ERROR",
@@ -320,7 +306,7 @@ if __name__ == "__main__":
         "--fuente",
         type=str,
         nargs="+",
-        choices=["ine", "world_mortality", "mspas_mec", "mspas_covid"],   #  agrega aquí cada fuente cuando se active
+        choices=["ine", "world_mortality", "mspas_mec", "mspas_covid", "centroamerica"],   #  agrega aquí cada fuente cuando se active
         help="Fuente(s) específica(s) a correr. Sin argumento corre todas las activas.",
         default=None,
     )
