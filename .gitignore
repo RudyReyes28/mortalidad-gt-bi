@@ -8,3 +8,9 @@ credentials.json
 .venv/
 venv/
 env/
+
+# Archivos Python
+**/__pycache__/
+*.pyc
+venv/
+.env
