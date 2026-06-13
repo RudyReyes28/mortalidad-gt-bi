@@ -33,9 +33,19 @@ from dotenv import load_dotenv
 
 #  Cargar .env desde la raíz del proyecto 
 # main.py vive en ingesta-fase1/ -> parents[1] = raíz del proyecto
-ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
-load_dotenv(ENV_PATH)
+#ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+#load_dotenv(ENV_PATH)
+# Buscar .env tanto en la raíz como en la subcarpeta actual
+ENV_RAIZ = Path(__file__).resolve().parents[1] / ".env"
+ENV_LOCAL = Path(__file__).resolve().parent / ".env"
 
+if ENV_LOCAL.exists():
+    load_dotenv(ENV_LOCAL)
+elif ENV_RAIZ.exists():
+    load_dotenv(ENV_RAIZ)
+else:
+    load_dotenv() # Carga por defecto del sistema
+    
 # Logging estructurado 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,11 +66,10 @@ sys.path.insert(0, str(LOADERS))
 #  Importar modulos del pipeline 
 from extractors.extract_gdrive import extract_gdrive
 from extractors.extract_world_mortality_s3 import extract_world_mortality_s3
+from extractors.extract_sharepoint import extract_sharepoint 
 from extractors.extract_mspas_mec import extract_mspas_mec
 from extractors.extract_mspas_covid import extract_mspas_covid
 from extractors.extract_centroamerica_rds import extract_rds
-# PENDIENTE — descomenta cuando se implemente el extractor
-# from extractors.extract_sharepoint import extract_sharepoint
 
 from loaders.load_sandbox import load_sandbox
 
@@ -76,7 +85,6 @@ def _cargar_config() -> dict:
 
         # Sandbox destino (siempre obligatorio)
         "sandbox_url": os.getenv("SANDBOX_DB_URL"),
-
         # Descomentar cuando se active cada fuente
         # AWS S3
         "aws_access_key": os.getenv("AWS_ACCESS_KEY_ID"),
@@ -86,17 +94,22 @@ def _cargar_config() -> dict:
         "s3_prefix": os.getenv("S3_PREFIX", "raw/centroamerica/"),
 
         # SharePoint — OMS/MSPAS
-        # "sp_url":  os.getenv("SHAREPOINT_URL"),
-        # "sp_user": os.getenv("SHAREPOINT_USER"),
-        # "sp_password": os.getenv("SHAREPOINT_PASSWORD"),
-        # "sp_folder": os.getenv("SHAREPOINT_FOLDER"),
+         "sp_url":  os.getenv("SHAREPOINT_URL"),
+         "sp_user": os.getenv("SHAREPOINT_USER"),
+         "sp_password": os.getenv("SHAREPOINT_PASSWORD"),
+         "sp_folder": os.getenv("SHAREPOINT_FOLDER"),
 
         # RDS fuente adicional
-        "rds_url": os.getenv("RDS_SOURCE_URL"),
+        # "rds_url": os.getenv("RDS_SOURCE_URL"),
     }
 
     # Validar solo las obligatorias de fuentes activas
     obligatorias = {
+        "sandbox_url": "SANDBOX_DB_URL",
+        "sp_url": "SHAREPOINT_URL",
+        "sp_user": "SHAREPOINT_USER",
+        "sp_password": "SHAREPOINT_PASSWORD",
+        "sp_folder": "SHAREPOINT_FOLDER"
         "gdrive_credentials": "GDRIVE_CREDENTIALS_PATH",
         "sandbox_url": "SANDBOX_DB_URL",
     }
@@ -144,6 +157,37 @@ def _construir_fuentes(config: dict) -> dict:
         },
     }
 
+    # PENDIENTE — Centroamérica desde S3
+    # fuentes["centroamerica"] = {
+    #     "descripcion": "Fuente centroamericana (AWS S3)",
+    #     "extractor":   extract_s3,
+    #     "kwargs": {
+    #         "bucket": config["s3_bucket"],
+    #         "prefix": config["s3_prefix"],
+    #         "aws_key": config["aws_access_key"],
+    #         "aws_secret": config["aws_secret_key"],
+    #         "region": config["aws_region"],
+    #     },
+    # }
+
+    #PENDIENTE  — OMS/MSPAS desde SharePoint
+    fuentes["oms"] = {
+        "descripcion": "OMS / MSPAS (SharePoint)",
+        "extractor": extract_sharepoint,
+        "kwargs": {
+            "site_url": config["sp_url"],
+            "username": config["sp_user"],
+            "password": config["sp_password"],
+            "folder_server_relative_url": config["sp_folder"],
+        },
+    }
+
+    #PENDIENTE  — Fuente adicional desde RDS
+    # fuentes["fuente_db"] = {
+    #     "descripcion": "Fuente adicional (RDS relacional)",
+    #     "extractor": extract_rds,
+    #     "kwargs": {"db_url": config["rds_url"]},
+    # }
     # ACTIVO — MSPAS Enfermedades Crónicas (MEC) desde Google Drive (CSV)
     fuentes["mspas_mec"] = {
         "descripcion": "MSPAS — Enfermedades Crónicas MEC 2012-2024 (Google Drive / CSV)",
@@ -157,18 +201,6 @@ def _construir_fuentes(config: dict) -> dict:
         "extractor": extract_mspas_covid,
         "kwargs": {"ruta_credenciales": config["gdrive_credentials"]},
     }
-
-    #PENDIENTE  — OMS/MSPAS desde SharePoint
-    # fuentes["oms"] = {
-    #     "descripcion": "OMS / MSPAS (SharePoint)",
-    #     "extractor": extract_sharepoint,
-    #     "kwargs": {
-    #         "sp_url": config["sp_url"],
-    #         "usuario":config["sp_user"],
-    #         "password":config["sp_password"],
-    #         "carpeta":config["sp_folder"],
-    #     },
-    # }
 
     #ACTIVA  — Fuente adicional desde RDS
     fuentes["centroamerica"] = {
@@ -306,7 +338,7 @@ if __name__ == "__main__":
         "--fuente",
         type=str,
         nargs="+",
-        choices=["ine", "world_mortality", "mspas_mec", "mspas_covid", "centroamerica"],   #  agrega aquí cada fuente cuando se active
+        choices=["ine", "world_mortality", "mspas_mec", "mspas_covid", "centroamerica", "oms"],   #  agrega aquí cada fuente cuando se active
         help="Fuente(s) específica(s) a correr. Sin argumento corre todas las activas.",
         default=None,
     )
