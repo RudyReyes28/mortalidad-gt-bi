@@ -28,7 +28,6 @@ plugins:
       handlers:
         python:
           paths: 
-            - ingesta-fase1          
             - ingesta-fase1
           options:
             docstring_style: google
