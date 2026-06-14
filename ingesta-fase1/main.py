@@ -100,7 +100,7 @@ def _cargar_config() -> dict:
          "sp_folder": os.getenv("SHAREPOINT_FOLDER"),
 
         # RDS fuente adicional
-        # "rds_url": os.getenv("RDS_SOURCE_URL"),
+        "rds_url": os.getenv("RDS_SOURCE_URL"),
     }
 
     # Validar solo las obligatorias de fuentes activas
@@ -109,7 +109,7 @@ def _cargar_config() -> dict:
         "sp_url": "SHAREPOINT_URL",
         "sp_user": "SHAREPOINT_USER",
         "sp_password": "SHAREPOINT_PASSWORD",
-        "sp_folder": "SHAREPOINT_FOLDER"
+        "sp_folder": "SHAREPOINT_FOLDER",
         "gdrive_credentials": "GDRIVE_CREDENTIALS_PATH",
         "sandbox_url": "SANDBOX_DB_URL",
     }
@@ -157,18 +157,6 @@ def _construir_fuentes(config: dict) -> dict:
         },
     }
 
-    # PENDIENTE — Centroamérica desde S3
-    # fuentes["centroamerica"] = {
-    #     "descripcion": "Fuente centroamericana (AWS S3)",
-    #     "extractor":   extract_s3,
-    #     "kwargs": {
-    #         "bucket": config["s3_bucket"],
-    #         "prefix": config["s3_prefix"],
-    #         "aws_key": config["aws_access_key"],
-    #         "aws_secret": config["aws_secret_key"],
-    #         "region": config["aws_region"],
-    #     },
-    # }
 
     #PENDIENTE  — OMS/MSPAS desde SharePoint
     fuentes["oms"] = {
@@ -182,12 +170,6 @@ def _construir_fuentes(config: dict) -> dict:
         },
     }
 
-    #PENDIENTE  — Fuente adicional desde RDS
-    # fuentes["fuente_db"] = {
-    #     "descripcion": "Fuente adicional (RDS relacional)",
-    #     "extractor": extract_rds,
-    #     "kwargs": {"db_url": config["rds_url"]},
-    # }
     # ACTIVO — MSPAS Enfermedades Crónicas (MEC) desde Google Drive (CSV)
     fuentes["mspas_mec"] = {
         "descripcion": "MSPAS — Enfermedades Crónicas MEC 2012-2024 (Google Drive / CSV)",
