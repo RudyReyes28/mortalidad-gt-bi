@@ -1,0 +1,64 @@
+name: Publicar Documentacion — MkDocs
+
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'           # cualquier cambio en la documentacion
+      - 'mkdocs.yml'        # cambio en la configuración de MkDocs
+      - '.github/workflows/docs.yml'  # cambio en este mismo workflow
+  workflow_dispatch: {}     # boton manual desde cualquier rama
+
+permissions:
+  contents: read
+  pages:    write
+  id-token: write
+
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+
+jobs:
+
+  build:
+    name: Construir sitio MkDocs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Instalar MkDocs Material
+        run: pip install mkdocs-material
+
+      - name: Construir sitio
+        run: mkdocs build --strict
+
+      - name: Subir sitio como artefacto
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site   # carpeta generada por mkdocs build
+
+  deploy:
+    name: Publicar en GitHub Pages
+    needs: build         
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Publicar en GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
