@@ -2,7 +2,7 @@
 
 **Fuente:** SharePoint Online — `/sites/OMS_RAW/`  
 **Destino:** `sandbox.sandbox_oms`  
-**Autor:** [Tu Nombre / Iniciales]  
+**Autor:** William Miranda  
 
 Extrae los fragmentos particionados del dataset de mortalidad de la OMS directamente desde una carpeta institucional en SharePoint Online. El pipeline gestiona un bypass automatizado para evadir solicitudes de autenticación multifactor (MFA) y procesa el flujo binario de archivos Apache Parquet directamente en la memoria RAM, optimizando el uso de almacenamiento y CPU del servidor.
 

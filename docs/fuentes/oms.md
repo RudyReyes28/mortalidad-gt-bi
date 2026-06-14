@@ -48,7 +48,7 @@ El proceso de extracción filtra las tablas masivas de hechos originales y molde
 | `time_unit` | String | Lista o variante epidemiológica bajo la cual se reportó el caso | `101` |
 | `deaths` | Integer | Cantidad total de defunciones registradas para esa partición | `332` |
 
-> 📌 **Nota sobre Trazabilidad:** Adicionalmente, el pipeline añade en caliente las columnas de auditoría `fuente_origen` (`SHAREPOINT_SCRAPING_HYBRID`), `archivo_origen` y `fecha_carga` al momento de persistir la data en PostgreSQL.
+>  **Nota sobre Trazabilidad:** Adicionalmente, el pipeline añade en caliente las columnas de auditoría `fuente_origen` (`SHAREPOINT_SCRAPING_HYBRID`), `archivo_origen` y `fecha_carga` al momento de persistir la data en PostgreSQL.
 
 ## Reglas de Limpieza y Automatización Aplicadas (El ETL)
 
