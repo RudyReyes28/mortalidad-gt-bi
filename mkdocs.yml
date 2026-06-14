@@ -40,6 +40,8 @@ nav:
     - INE Guatemala: fuentes/ine.md
     - World Mortality Dataset: fuentes/world-mortality.md
     - Centroamérica: fuentes/centroamerica.md
+    - MSPAS Enfermedades Crónicas: fuentes/mspas-mec.md
+    - MSPAS Fallecidos COVID-19: fuentes/mspas-covid.md
   - Pipeline:
     - Arquitectura: pipeline/arquitectura.md
     - Ingesta: pipeline/ingesta.md
