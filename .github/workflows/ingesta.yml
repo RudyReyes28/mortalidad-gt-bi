@@ -1,0 +1,187 @@
+name: Pipeline de Ingesta - Fase 1
+
+on:
+  workflow_dispatch:          
+    inputs:
+      fuente:
+        description: |
+          Fuente específica a ejecutar
+          Opciones: ine | centroamerica | oms | world_mortality | mspas_mec | mspas_covid
+          Dejar vacio para ejecutar TODAS las fuentes activas
+        required: false
+        default: ''
+      ambiente:
+        description: 'Ambiente de ejecucion'
+        required: true
+        default: 'produccion'
+        type: choice
+        options:
+          - produccion
+          - prueba
+
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ingesta-pipeline
+  cancel-in-progress: false   # no cancelar una carga en curso
+
+
+jobs:
+  ejecutar-pipeline:
+    name: Ingesta - Sandbox
+    runs-on: ubuntu-latest
+    timeout-minutes: 60       
+
+    steps:
+
+      #  1. Verificar que los secrets obligatorios existen 
+      - name: Verificar secrets requeridos
+        run: |
+          echo "Verificando secrets..."
+          if [ -z "${{ secrets.EC2_HOST }}" ]; then
+            echo "ERROR: Secret EC2_HOST no configurado"
+            exit 1
+          fi
+          if [ -z "${{ secrets.EC2_USER }}" ]; then
+            echo "ERROR: Secret EC2_USER no configurado"
+            exit 1
+          fi
+          if [ -z "${{ secrets.EC2_SSH_KEY }}" ]; then
+            echo "ERROR: Secret EC2_SSH_KEY no configurado"
+            exit 1
+          fi
+          echo "Secrets verificados correctamente."
+
+      #  2. Log de inicio
+      - name: Información de la ejecución
+        run: |
+          echo "=================================================="
+          echo "  PIPELINE DE INGESTA — FASE 1"
+          echo "  Plataforma Analítica de Mortalidad GT"
+          echo "=================================================="
+          echo "  Fecha : $(date '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "  Disparado por: ${{ github.actor }}"
+          echo "  Rama : ${{ github.ref_name }}"
+          echo "  Fuente  : ${{ github.event.inputs.fuente || 'TODAS' }}"
+          echo "  Ambiente : ${{ github.event.inputs.ambiente }}"
+          echo "  EC2 Host: ${{ secrets.EC2_HOST }}"
+          echo "=================================================="
+
+      # 3. Conectar a EC2 y ejecutar el pipeline 
+      - name: Ejecutar pipeline en EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          timeout: 60s       # timeout de conexión SSH
+          command_timeout: 55m      # timeout del comando en la EC2
+          script: |
+
+            echo ""
+            echo "---------------------------------------------------"
+            echo "  Conectado a EC2: $(hostname)"
+            echo "  Fecha EC2: $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "----------------------------------------------------"
+
+            cd /home/ubuntu/mortalidad-gt-bi || {
+              echo "ERROR: Directorio del proyecto no encontrado."
+              echo "Verifica que el repositorio está clonado en /home/ubuntu/mortalidad-gt-bi"
+              exit 1
+            }
+
+            # Jalar iltimos cambios del repositorio 
+            echo ""
+            echo "Actualizando código desde GitHub"
+            git fetch origin main
+            git reset --hard origin/main
+            echo "Código actualizado. Commit actual: $(git log -1 --oneline)"
+
+            #  Activar entorno virtual 
+            echo ""
+            echo " Activando entorno virtual Python..."
+            if [ ! -d ".venv" ]; then
+              echo "Entorno virtual no encontrado. Creando..."
+              python3 -m venv .venv
+            fi
+            source .venv/bin/activate
+            echo "Python: $(python --version)"
+
+            # Instalar/actualizar dependencias 
+            echo ""
+            echo "Instalando dependencias..."
+            pip install -q -r requirements.txt
+            echo "Dependencias instaladas."
+
+            # Verificar que el .env existe 
+            echo ""
+            echo "Verificando configuración"
+            if [ ! -f ".env" ]; then
+              echo "ERROR: Archivo .env no encontrado en la EC2."
+              echo "Crea el .env manualmente en /home/ubuntu/mortalidad-gt-bi/.env"
+              exit 1
+            fi
+            echo ".env encontrado."
+
+            # Verificar credenciales de Google Drive 
+            GDRIVE_PATH=$(grep GDRIVE_CREDENTIALS_PATH .env | cut -d '=' -f2)
+            if [ ! -f "$GDRIVE_PATH" ]; then
+              echo "ERROR: credentials.json de Google Drive no encontrado en: $GDRIVE_PATH"
+              exit 1
+            fi
+            echo "Credenciales Google Drive encontradas."
+
+            # Ejecutar el pipeline 
+            echo ""
+            echo "-----------------------------------"
+            echo "  INICIANDO PIPELINE"
+            echo "-----------------------------------"
+
+            FUENTE="${{ github.event.inputs.fuente }}"
+
+            if [ -z "$FUENTE" ]; then
+              echo "Ejecutando TODAS las fuentes activas"
+              python ingesta-fase1/main.py
+            else
+              echo "Ejecutando fuente específica: $FUENTE"
+              python ingesta-fase1/main.py --fuente $FUENTE
+            fi
+
+            EXIT_CODE=$?
+
+            # Mostrar reporte más reciente 
+            echo ""
+            echo "Reporte de ejecución:"
+            REPORTE=$(ls -t ingesta-fase1/reportes/ejecucion_*.json 2>/dev/null | head -1)
+            if [ -f "$REPORTE" ]; then
+              echo "Archivo: $REPORTE"
+              cat "$REPORTE"
+            else
+              echo "No se encontró archivo de reporte."
+            fi
+
+            echo ""
+            echo "-----------------------------------"
+            if [ $EXIT_CODE -eq 0 ]; then
+              echo "  PIPELINE COMPLETADO EXITOSAMENTE"
+            else
+              echo "  PIPELINE COMPLETADO CON ERRORES"
+            fi
+            echo "-----------------------------------"
+
+            exit $EXIT_CODE
+
+      # 4. Notificación de resultado
+      - name: Resultado final
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "Pipeline ejecutado correctamente."
+            echo "  Revisa los logs de la EC2 arriba para ver el detalle de filas cargadas."
+          else
+            echo "El pipeline falló."
+            echo "  Revisa los logs del paso anterior para identificar el error"
+          fi
