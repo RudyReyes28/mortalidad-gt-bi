@@ -49,6 +49,8 @@ nav:
       - Google Drive (INE): pipeline/extractores/extract_gdrive.md
       - AWS S3 (World Mortality): pipeline/extractores/extract_world_mortality_s3.md
       - RDS Centroamérica: pipeline/extractores/extract_centroamerica_rds.md
+    - Loaders:
+      - Sandbox: pipeline/loaders/load_sandbox.md
   - Trazabilidad:
     - Data Lineage: trazabilidad/data-lineage.md
     - Solicitud RENAP: trazabilidad/renap/solicitud.md

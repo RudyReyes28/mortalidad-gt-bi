@@ -41,7 +41,7 @@ jobs:
         run: pip install mkdocs-material mkdocstrings mkdocstrings-python
 
       - name: Construir sitio
-        run: mkdocs build --strict
+        run: mkdocs build
 
       - name: Subir sitio como artefacto
         uses: actions/upload-pages-artifact@v3

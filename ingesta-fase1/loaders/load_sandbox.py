@@ -1,3 +1,13 @@
+"""
+Módulo de carga centralizada hacia el Sandbox en PostgreSQL.
+
+Este script es el destino final (Load) del pipeline ETL en su primera fase. 
+Recibe los DataFrames procesados por cualquiera de los extractores y los 
+inserta en sus respectivas tablas dentro del esquema `sandbox`. 
+Utiliza una estrategia de carga completa (Truncate + Reload) mediante 
+el parámetro `if_exists="replace"`.
+"""
+
 import logging
 from datetime import datetime
 
@@ -25,9 +35,19 @@ TABLAS_PERMITIDAS = {
 }
 
 
-# Conexion a PostgreSQL 
 def _crear_engine(db_url: str):
+    """
+    Establece y valida la conexión a la base de datos PostgreSQL de destino.
 
+    Args:
+        db_url (str): Cadena de conexión SQLAlchemy (ej. `postgresql://user:pass@host/db`).
+
+    Returns:
+        sqlalchemy.engine.Engine: Motor de base de datos listo para transacciones.
+
+    Raises:
+        sqlalchemy.exc.SQLAlchemyError: Si la conexión a la base de datos falla.
+    """
     logger.info("Conectando a PostgreSQL...")
     engine = create_engine(db_url, pool_pre_ping=True)
     # Prueba la conexión antes de continuar
@@ -37,27 +57,46 @@ def _crear_engine(db_url: str):
     return engine
 
 
-# Crear schema sandbox si no existe 
 def _asegurar_schema(engine):
-    """Crea el schema 'sandbox' si no existe."""
+    """
+    Garantiza la existencia del esquema 'sandbox' en la base de datos.
+
+    Si el esquema no existe, ejecuta la sentencia SQL para crearlo. 
+    Esto es útil para despliegues iniciales en entornos limpios.
+
+    Args:
+        engine (sqlalchemy.engine.Engine): Motor de base de datos activo.
+    """
     with engine.begin() as conn:
         conn.execute(text("CREATE SCHEMA IF NOT EXISTS sandbox"))
     logger.info("Schema 'sandbox' verificado.")
 
 
-# Carga principal 
 def load_sandbox(df: pd.DataFrame, fuente: str, db_url: str) -> dict:
     """
-    Carga el DataFrame al Sandbox en PostgreSQL.
+    Inserta el DataFrame consolidado en la tabla correspondiente del Sandbox.
 
-    Parametros:
-        df      : DataFrame retornado por el extractor correspondiente.
-        fuente  : clave de la fuente. Valores válidos:
-                  'ine' | 'oms' | 'centroamerica' | 'fuente_db'
-        db_url  : cadena de conexión PostgreSQL (viene del .env).
+    El proceso sigue una estrategia destructiva inicial (`if_exists="replace"`), 
+    lo que significa que la tabla se borra y se vuelve a crear en cada ejecución 
+    para asegurar que los datos crudos estén sincronizados con la fuente original 
+    sin arrastrar duplicados históricos. La inserción se hace por lotes (chunks) 
+    para no saturar la memoria del servidor de base de datos.
 
-    Retorna:
-        dict con el reporte de la ejecucion (se guarda en main.py).
+    Args:
+        df (pd.DataFrame): Datos crudos consolidados por el extractor.
+        fuente (str): Clave identificadora de la fuente. Debe existir dentro 
+            del diccionario `TABLAS_PERMITIDAS` (ej. 'ine', 'oms').
+        db_url (str): Cadena de conexión hacia la base de datos de destino.
+
+    Returns:
+        dict: Un diccionario con el reporte detallado de la ejecución, el cual 
+            incluye claves como `fuente`, `tabla`, `filas_cargadas`, `status`, 
+            `duracion_seg` y `error`. Ideal para el orquestador `main.py`.
+
+    Raises:
+        ValueError: Si la clave proporcionada en `fuente` no está permitida.
+        Exception: Si ocurre un error a nivel de base de datos durante la 
+            inserción de los lotes (`to_sql`).
     """
     # Validar fuente
     if fuente not in TABLAS_PERMITIDAS:
@@ -135,7 +174,6 @@ def load_sandbox(df: pd.DataFrame, fuente: str, db_url: str) -> dict:
         engine.dispose()
 
     return reporte
-
 
 # Ejecucion directa para prueba local 
 if __name__ == "__main__":

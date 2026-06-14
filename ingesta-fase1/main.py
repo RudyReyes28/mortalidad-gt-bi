@@ -1,24 +1,10 @@
 """
 Orquestador principal del pipeline de ingesta Fase 1.
-Ejecuta todos los extractores en secuencia y carga cada resultado
-al Sandbox de PostgreSQL
 
-Flujo:
-    extract_gdrive()-> sandbox.sandbox_ine            ACTIVO
-    extract_s3()->  sandbox.sandbox_centroamerica  PENDIENTE
-    extract_sharepoint() ->sandbox.sandbox_oms            PENDIENTE
-    extract_rds()  -> sandbox.sandbox_fuente_db      PENDIENTE
-
-Uso:
-    python main.py  # corre todas las fuentes activas
-    python main.py --fuente ine # corre solo una fuente
-
-Para activar una fuente nueva:
-    1. implementa extractors/extract_<nombre>.py
-    2. Descomenta el import correspondiente abajo
-    3. Descomenta la entrada en _construir_fuentes()
-    4. Agrega las variables necesarias al .env
-
+Ejecuta todos los extractores en secuencia y carga cada resultado al Sandbox 
+de PostgreSQL. Funciona como el punto de entrada (Entry Point) de la aplicación, 
+gestionando dependencias de entorno, orquestación de funciones, captura de errores 
+y generación de trazas de auditoría (Data Lineage).
 """
 
 import argparse
@@ -31,11 +17,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-#  Cargar .env desde la raíz del proyecto 
-# main.py vive en ingesta-fase1/ -> parents[1] = raíz del proyecto
-#ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
-#load_dotenv(ENV_PATH)
-# Buscar .env tanto en la raíz como en la subcarpeta actual
+# Cargar .env desde la raíz del proyecto o subcarpeta actual
 ENV_RAIZ = Path(__file__).resolve().parents[1] / ".env"
 ENV_LOCAL = Path(__file__).resolve().parent / ".env"
 
@@ -63,7 +45,7 @@ REPORTES = RAIZ / "reportes"
 sys.path.insert(0, str(EXTRACTORS))
 sys.path.insert(0, str(LOADERS))
 
-#  Importar modulos del pipeline 
+# Importar modulos del pipeline 
 from extractors.extract_gdrive import extract_gdrive
 from extractors.extract_world_mortality_s3 import extract_world_mortality_s3
 from extractors.extract_sharepoint import extract_sharepoint 
@@ -74,36 +56,33 @@ from extractors.extract_centroamerica_rds import extract_rds
 from loaders.load_sandbox import load_sandbox
 
 
-# Variables de entorno requeridas
 def _cargar_config() -> dict:
     """
-    Lee y valida las variables de entorno necesarias para las fuentes ACTIVAS.
+    Lee y valida las variables de entorno necesarias para las fuentes activas.
+
+    Returns:
+        dict: Diccionario que contiene las credenciales y rutas obtenidas 
+            del sistema o del archivo `.env`.
+
+    Raises:
+        EnvironmentError: Si falta alguna variable de entorno declarada como 
+            obligatoria para la ejecución del pipeline.
     """
     config = {
-        # Google Drive — INE (ACTIVO)
         "gdrive_credentials": os.getenv("GDRIVE_CREDENTIALS_PATH"),
-
-        # Sandbox destino (siempre obligatorio)
         "sandbox_url": os.getenv("SANDBOX_DB_URL"),
-        # Descomentar cuando se active cada fuente
-        # AWS S3
         "aws_access_key": os.getenv("AWS_ACCESS_KEY_ID"),
         "aws_secret_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
         "aws_region": os.getenv("AWS_REGION", "us-east-1"),
         "s3_bucket": os.getenv("S3_BUCKET_NAME"),
         "s3_prefix": os.getenv("S3_PREFIX", "raw/centroamerica/"),
-
-        # SharePoint — OMS/MSPAS
          "sp_url":  os.getenv("SHAREPOINT_URL"),
          "sp_user": os.getenv("SHAREPOINT_USER"),
          "sp_password": os.getenv("SHAREPOINT_PASSWORD"),
          "sp_folder": os.getenv("SHAREPOINT_FOLDER"),
-
-        # RDS fuente adicional
         "rds_url": os.getenv("RDS_SOURCE_URL"),
     }
 
-    # Validar solo las obligatorias de fuentes activas
     obligatorias = {
         "sandbox_url": "SANDBOX_DB_URL",
         "sp_url": "SHAREPOINT_URL",
@@ -111,8 +90,8 @@ def _cargar_config() -> dict:
         "sp_password": "SHAREPOINT_PASSWORD",
         "sp_folder": "SHAREPOINT_FOLDER",
         "gdrive_credentials": "GDRIVE_CREDENTIALS_PATH",
-        "sandbox_url": "SANDBOX_DB_URL",
     }
+    
     faltantes = [var for key, var in obligatorias.items() if not config[key]]
     if faltantes:
         raise EnvironmentError(
@@ -123,28 +102,26 @@ def _cargar_config() -> dict:
     return config
 
 
-# Definicion de fuentes activas
 def _construir_fuentes(config: dict) -> dict:
     """
-    Registra cada fuente ACTIVA con su extractor y argumentos.
+    Registra cada fuente del proyecto junto a su módulo extractor y parámetros.
 
-     integrar tu extractor:
-        1. Implementa extractors/extract_<nombre>.py
-           La función principal debe retornar un pd.DataFrame
-        2. Descomenta el import arriba
-        3. Descomenta tu bloque aqui
-        4. Agrega tus variables al .env y al _cargar_config()
+    Args:
+        config (dict): Diccionario con las variables de configuración ya validadas.
+
+    Returns:
+        dict: Un diccionario anidado donde la clave es el identificador de la 
+            fuente (ej. 'ine', 'world_mortality') y el valor contiene la descripción, 
+            el puntero a la función extractora y sus argumentos (kwargs).
     """
     fuentes = {}
 
-    # ACTIVO — INE desde Google Drive
     fuentes["ine"] = {
         "descripcion": "INE — Estadísticas vitales de defunciones (Google Drive)",
         "extractor": extract_gdrive,
         "kwargs": {"ruta_credenciales": config["gdrive_credentials"]},
     }
 
-    # ACTIVO - WORLD MORTALITY DESDE S3
     fuentes["world_mortality"] = {
         "descripcion": "World Mortality Dataset (AWS S3)",
         "extractor": extract_world_mortality_s3,
@@ -157,8 +134,6 @@ def _construir_fuentes(config: dict) -> dict:
         },
     }
 
-
-    #PENDIENTE  — OMS/MSPAS desde SharePoint
     fuentes["oms"] = {
         "descripcion": "OMS / MSPAS (SharePoint)",
         "extractor": extract_sharepoint,
@@ -170,21 +145,18 @@ def _construir_fuentes(config: dict) -> dict:
         },
     }
 
-    # ACTIVO — MSPAS Enfermedades Crónicas (MEC) desde Google Drive (CSV)
     fuentes["mspas_mec"] = {
         "descripcion": "MSPAS — Enfermedades Crónicas MEC 2012-2024 (Google Drive / CSV)",
         "extractor": extract_mspas_mec,
         "kwargs": {"ruta_credenciales": config["gdrive_credentials"]},
     }
 
-    # ACTIVO — MSPAS Fallecidos COVID-19 desde Google Drive (CSV)
     fuentes["mspas_covid"] = {
         "descripcion": "MSPAS — Fallecidos COVID-19 por municipio 2020-2024 (Google Drive / CSV)",
         "extractor": extract_mspas_covid,
         "kwargs": {"ruta_credenciales": config["gdrive_credentials"]},
     }
 
-    #ACTIVA  — Fuente adicional desde RDS
     fuentes["centroamerica"] = {
          "descripcion": "Fuente adicional (RDS relacional)",
          "extractor": extract_rds,
@@ -194,9 +166,21 @@ def _construir_fuentes(config: dict) -> dict:
     return fuentes
 
 
-# Guardar reporte de ejecucion
-def _guardar_reporte(reporte_global: dict):
-    """Guarda el reporte JSON de la ejecución en ingesta-fase1/reportes/."""
+def _guardar_reporte(reporte_global: dict) -> Path:
+    """
+    Vuelca el reporte de ejecución estructurado en un archivo JSON local.
+
+    Genera un registro histórico que actúa como evidencia de Data Lineage, 
+    detallando qué fuentes se corrieron, el volumen de datos extraídos, 
+    y cualquier error encontrado.
+
+    Args:
+        reporte_global (dict): Diccionario maestro que agrupa los resultados 
+            individuales de cada tabla cargada.
+
+    Returns:
+        Path: Ruta absoluta del archivo JSON generado.
+    """
     REPORTES.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     ruta = REPORTES / f"ejecucion_{timestamp}.json"
@@ -208,14 +192,17 @@ def _guardar_reporte(reporte_global: dict):
     return ruta
 
 
-#  Pipeline principal 
 def run_pipeline(fuentes_a_correr: list = None):
     """
-    Ejecuta el pipeline completo o un subconjunto de fuentes activas.
+    Ejecuta el ciclo de vida completo del pipeline de extracción y carga.
 
-    Parametro:
-        fuentes_a_correr : lista de claves a ejecutar.
-                           None = todas las fuentes activas.
+    Itera sobre las fuentes configuradas, dispara sus respectivos extractores, 
+    pasa el DataFrame resultante a `load_sandbox` y compila un reporte global.
+
+    Args:
+        fuentes_a_correr (list, optional): Lista de identificadores de las 
+            fuentes específicas a ejecutar. Si se envía `None`, procesa todas 
+            las fuentes registradas.
     """
     inicio_pipeline = datetime.now()
 
@@ -232,7 +219,6 @@ def run_pipeline(fuentes_a_correr: list = None):
 
     fuentes = _construir_fuentes(config)
 
-    # Filtrar si se especifico una fuente particular
     if fuentes_a_correr:
         invalidas = [f for f in fuentes_a_correr if f not in fuentes]
         if invalidas:
@@ -258,7 +244,6 @@ def run_pipeline(fuentes_a_correr: list = None):
         },
     }
 
-    #  Ejecutar cada fuente 
     for clave, meta in fuentes.items():
         logger.info(f"\n Procesando: {clave.upper()}")
         logger.info(f"  {meta['descripcion']}")
@@ -285,8 +270,6 @@ def run_pipeline(fuentes_a_correr: list = None):
             }
             reporte_global["resumen"]["con_error"] += 1
            
-
-    # Resumen final
     fin      = datetime.now()
     duracion = (fin - inicio_pipeline).total_seconds()
     reporte_global["resumen"]["duracion_seg"] = round(duracion, 1)
@@ -311,7 +294,6 @@ def run_pipeline(fuentes_a_correr: list = None):
         sys.exit(0)
 
 
-#  Entry point 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Pipeline de ingesta Fase 1 — Plataforma Analítica de Mortalidad GT"
@@ -320,7 +302,7 @@ if __name__ == "__main__":
         "--fuente",
         type=str,
         nargs="+",
-        choices=["ine", "world_mortality", "mspas_mec", "mspas_covid", "centroamerica", "oms"],   #  agrega aquí cada fuente cuando se active
+        choices=["ine", "world_mortality", "mspas_mec", "mspas_covid", "centroamerica", "oms"],   
         help="Fuente(s) específica(s) a correr. Sin argumento corre todas las activas.",
         default=None,
     )

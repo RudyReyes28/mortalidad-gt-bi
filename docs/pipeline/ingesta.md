@@ -115,3 +115,15 @@ Cada corrida del pipeline genera un archivo JSON en `ingesta-fase1/reportes/`:
 ```
 
 Este archivo forma parte del **data lineage** — evidencia de cada ejecución del pipeline.
+
+---
+
+## Orquestador Principal (main.py)
+
+El archivo `main.py` actúa como el **cerebro de la Fase 1**. Se encarga de leer el entorno, validar credenciales, instanciar los extractores, y asegurar que el ciclo ETL completo llegue hasta su guardado final. Adicionalmente, cuenta con una interfaz de línea de comandos (CLI) administrada por `argparse` para flexibilizar la ejecución manual o automatizada.
+
+::: main
+    options:
+        show_root_heading: false
+        show_if_no_docstring: false
+        filters: []
