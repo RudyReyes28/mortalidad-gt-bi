@@ -1,9 +1,11 @@
 """
-Extrae datos de mortalidad de Centroamerica (Panamá y Costa Rica)
-desde el RDS PostgreSQL y retorna un DataFrame consolidado
+Módulo de extracción y consolidación de datos de Centroamérica desde RDS.
 
-Fuente  : RDS PostgreSQL — sandbox.sandbox_centroamerica_panama
-                         — sandbox.sandbox_centroamerica_costa_rica
+Este script se conecta a una base de datos PostgreSQL (RDS) para extraer 
+datos regionales crudos (específicamente de Panamá y Costa Rica). Su función 
+principal es leer estas tablas con esquemas heterogéneos, normalizarlas hacia 
+un esquema estándar unificado y consolidarlas en un único DataFrame para 
+su posterior carga en el Sandbox.
 """
 
 import logging
@@ -28,8 +30,6 @@ TABLAS_FUENTE = {
 }
 
 # Columnas estandar de salida
-# Se normalizan las columnas de ambas tablas a un schema comun
-# para que el Sandbox tenga una tabla unificada de Centroamerica.
 COLUMNAS_SALIDA = [
     "pais",
     "anio",
@@ -46,10 +46,21 @@ COLUMNAS_SALIDA = [
 ]
 
 
-#Conexion al RDS
 def _crear_engine(db_url: str):
     """
-    Crea y verifica la conexión al RDS PostgreSQL.
+    Crea y verifica la conexión al motor RDS PostgreSQL.
+
+    Utiliza SQLAlchemy con `pool_pre_ping` para asegurar que la conexión 
+    esté viva antes de ejecutar transacciones.
+
+    Args:
+        db_url (str): Cadena de conexión completa en formato PostgreSQL.
+
+    Returns:
+        sqlalchemy.engine.Engine: Objeto engine listo para consultas SQL.
+
+    Raises:
+        ConnectionError: Si las credenciales son inválidas o el host es inalcanzable.
     """
     logger.info("Conectando al RDS PostgreSQL...")
     try:
@@ -62,8 +73,20 @@ def _crear_engine(db_url: str):
         raise ConnectionError(f"No se pudo conectar al RDS: {e}")
 
 
-# Extraer y normalizar Panama
 def _extraer_panama(engine) -> pd.DataFrame:
+    """
+    Extrae y normaliza los registros de mortalidad de Panamá.
+
+    Lee la tabla `sandbox_centroamerica_panama`, inyecta la columna del país, 
+    e imputa como nulos (`None`) los campos demográficos que no provee 
+    esta fuente (población total y tasa bruta).
+
+    Args:
+        engine (sqlalchemy.engine.Engine): Motor de base de datos activo.
+
+    Returns:
+        pd.DataFrame: Datos de Panamá estandarizados al esquema de salida.
+    """
     logger.info("Extrayendo datos de Panamá...")
     query = "SELECT * FROM sandbox.sandbox_centroamerica_panama ORDER BY anio"
     df = pd.read_sql(query, engine)
@@ -88,6 +111,20 @@ def _extraer_panama(engine) -> pd.DataFrame:
 
 
 def _extraer_costa_rica(engine) -> pd.DataFrame:
+    """
+    Extrae y normaliza los registros de mortalidad de Costa Rica.
+
+    Lee la tabla `sandbox_centroamerica_costa_rica`, mapea las columnas 
+    con nombres diferentes al estándar e imputa como nulos (`None`) 
+    los desglose de defunciones específicas (infantil, materna, etc.) 
+    que no están disponibles en esta fuente.
+
+    Args:
+        engine (sqlalchemy.engine.Engine): Motor de base de datos activo.
+
+    Returns:
+        pd.DataFrame: Datos de Costa Rica estandarizados al esquema de salida.
+    """
     logger.info("Extrayendo datos de Costa Rica...")
     query = "SELECT * FROM sandbox.sandbox_centroamerica_costa_rica ORDER BY anio"
     df = pd.read_sql(query, engine)
@@ -111,14 +148,25 @@ def _extraer_costa_rica(engine) -> pd.DataFrame:
     return df_normalizado
 
 
-# Funcion principal exportada
 def extract_rds(db_url: str) -> pd.DataFrame:
     """
-    Punto de entrada del extractor RDS.
+    Orquestador principal del extractor desde RDS PostgreSQL.
 
-    Retorna:
-        pd.DataFrame con todos los registros de Centroamérica
-        listos para el Sandbox (sandbox.sandbox_fuente_db).
+    Inicia la conexión con la base de datos, ejecuta en secuencia los módulos 
+    de extracción específicos por país (Panamá y Costa Rica), consolida 
+    los resultados y verifica que el orden de las columnas cumpla 
+    estrictamente con el esquema de salida unificado.
+
+    Args:
+        db_url (str): URL de conexión a la base de datos fuente.
+
+    Returns:
+        pd.DataFrame: Un único DataFrame con los datos regionales consolidados 
+            y listos para ser inyectados en la tabla destino del Sandbox.
+
+    Raises:
+        RuntimeError: Si ocurre un error crítico que impide extraer datos 
+            de cualquier país.
     """
     logger.info("=" * 60)
     logger.info("INICIO — Extractor RDS (Centroamerica: Panama + Costa Rica)")
@@ -165,7 +213,6 @@ def extract_rds(db_url: str) -> pd.DataFrame:
     logger.info("=" * 60)
 
     return df_consolidado
-
 
 # Ejecucion directa para pruebas locales
 if __name__ == "__main__":

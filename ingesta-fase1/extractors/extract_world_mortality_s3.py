@@ -1,7 +1,10 @@
 """
+Módulo de extracción de datos del World Mortality Dataset desde AWS S3.
 
-Fuente: S3 — s3://mortalidad-gt-fuentes/raw/world-mortality/
-Destino: retorna pd.DataFrame (lo recibe load_sandbox.py)
+Se encarga de establecer conexión con Amazon S3 mediante Boto3, listar los 
+archivos crudos (JSON) alojados bajo un prefijo específico, descargarlos 
+directamente en memoria, estandarizar su estructura de columnas e inyectar la 
+trazabilidad necesaria antes de enviarlos al Sandbox.
 """
 
 import io
@@ -20,7 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("extractor.s3")
 
-#Columnas estandar del World Mortality Dataset
+# Columnas estandar del World Mortality Dataset
 COLUMNAS_ESTANDAR = [
     "iso3c",
     "country_name",
@@ -30,16 +33,22 @@ COLUMNAS_ESTANDAR = [
     "deaths",
 ]
 
-
 # Se mantienen todos los países por defecto en el Sandbox (datos crudos).
 # El filtro regional se aplica en Stage (Fase 2).
 PAISES_CENTROAMERICA = ["GTM", "HND", "SLV", "NIC", "CRI", "PAN", "BLZ"]
 
 
-# Autenticacion 
 def _crear_cliente_s3(aws_key: str, aws_secret: str, region: str):
     """
-    Crea y retorna un cliente S3 autenticado con las credenciales del .env.
+    Crea y retorna un cliente de Amazon S3 autenticado.
+
+    Args:
+        aws_key (str): ID de la llave de acceso de AWS (Access Key ID).
+        aws_secret (str): Llave secreta de acceso de AWS (Secret Access Key).
+        region (str): Región de AWS donde se aloja el bucket (ej. 'us-east-1').
+
+    Returns:
+        botocore.client.S3: Cliente Boto3 inicializado y listo para interactuar con S3.
     """
     logger.info("Autenticando con AWS S3...")
     cliente = boto3.client(
@@ -52,12 +61,25 @@ def _crear_cliente_s3(aws_key: str, aws_secret: str, region: str):
     return cliente
 
 
-# Listar archivos en un prefijo 
 def _listar_archivos(cliente, bucket: str, prefix: str) -> list[dict]:
     """
     Lista todos los archivos JSON y CSV dentro del prefijo dado en S3.
-    Retorna lista de dicts con {key, size}.
-    Ignora carpetas (keys que terminan en /).
+
+    Explora el bucket ignorando explícitamente los objetos que representan 
+    carpetas (cuyas llaves terminan en `/`).
+
+    Args:
+        cliente (botocore.client.S3): Cliente autenticado de Boto3.
+        bucket (str): Nombre del bucket de destino.
+        prefix (str): Ruta o prefijo donde se encuentran los archivos.
+
+    Returns:
+        list[dict]: Lista de diccionarios, donde cada elemento contiene el 
+            identificador del archivo (`key`) y su tamaño en KB (`size_kb`).
+
+    Raises:
+        ConnectionError: Si ocurre un fallo de red o permisos al contactar la API de AWS.
+        FileNotFoundError: Si no se encuentran archivos válidos (.json o .csv) en la ruta.
     """
     logger.info(f"Listando archivos en s3://{bucket}/{prefix}...")
     try:
@@ -67,7 +89,6 @@ def _listar_archivos(cliente, bucket: str, prefix: str) -> list[dict]:
 
     objetos = respuesta.get("Contents", [])
 
-    # Filtrar solo JSON y CSV, ignorar carpetas
     archivos = [
         {"key": obj["Key"], "size_kb": round(obj["Size"] / 1024, 1)}
         for obj in objetos
@@ -87,10 +108,24 @@ def _listar_archivos(cliente, bucket: str, prefix: str) -> list[dict]:
     return archivos
 
 
-# Descargar y leer un archivo desde S3 
 def _descargar_archivo(cliente, bucket: str, archivo: dict) -> pd.DataFrame:
     """
-    Descarga un archivo desde S3 en memoria y lo lee con pandas
+    Descarga un archivo desde S3 hacia la memoria y lo convierte en DataFrame.
+
+    Detecta la extensión del archivo a partir de su llave para utilizar 
+    el motor de lectura de Pandas adecuado (`read_json` o `read_csv`).
+
+    Args:
+        cliente (botocore.client.S3): Cliente autenticado de Boto3.
+        bucket (str): Nombre del bucket de origen.
+        archivo (dict): Diccionario con la metadata del archivo (debe contener 'key').
+
+    Returns:
+        pd.DataFrame: DataFrame con la información contenida en el archivo.
+
+    Raises:
+        IOError: Si la descarga del flujo binario falla.
+        ValueError: Si el archivo no tiene una extensión soportada (.csv o .json).
     """
     key = archivo["key"]
     logger.info(f"Descargando: {key}...")
@@ -114,11 +149,20 @@ def _descargar_archivo(cliente, bucket: str, archivo: dict) -> pd.DataFrame:
     return df
 
 
-# Estandarizar columnas
 def _estandarizar_columnas(df: pd.DataFrame, nombre_archivo: str) -> pd.DataFrame:
     """
-    Verifica que el DataFrame tenga las columnas estándar del World Mortality Dataset.
-    Columnas faltantes se imputan como NULL con WARNING.
+    Verifica y adapta el DataFrame al esquema estándar del World Mortality Dataset.
+
+    Si faltan columnas, las imputa con valores NULL generando un WARNING. 
+    Las columnas extra que traiga el archivo original no se eliminan en esta fase, 
+    se conservan para el Sandbox.
+
+    Args:
+        df (pd.DataFrame): DataFrame original descargado.
+        nombre_archivo (str): Nombre del archivo procesado para trazas en el log.
+
+    Returns:
+        pd.DataFrame: DataFrame con las columnas ordenadas según `COLUMNAS_ESTANDAR`.
     """
     columnas_actuales  = set(df.columns)
     columnas_esperadas = set(COLUMNAS_ESTANDAR)
@@ -141,13 +185,17 @@ def _estandarizar_columnas(df: pd.DataFrame, nombre_archivo: str) -> pd.DataFram
     return df[COLUMNAS_ESTANDAR]
 
 
-# Agregar columnas de trazabilidad
 def _agregar_trazabilidad(df: pd.DataFrame, nombre_archivo: str) -> pd.DataFrame:
     """
-    Agrega columnas de control para el Sandbox:
-        fuente_origen: identificador de la fuente
-        archivo_origen: nombre del archivo S3 descargado
-        fecha_carga: timestamp de la ejecución del pipeline
+    Agrega columnas de control y auditoría para el almacenamiento en Sandbox.
+
+    Args:
+        df (pd.DataFrame): DataFrame con la información estandarizada.
+        nombre_archivo (str): Nombre físico del objeto en S3.
+
+    Returns:
+        pd.DataFrame: El mismo DataFrame incluyendo `fuente_origen`, 
+            `archivo_origen`, y `fecha_carga`.
     """
     df["fuente_origen"]  = "WORLD_MORTALITY"
     df["archivo_origen"] = nombre_archivo
@@ -155,7 +203,6 @@ def _agregar_trazabilidad(df: pd.DataFrame, nombre_archivo: str) -> pd.DataFrame
     return df
 
 
-#  Funcion principal exportada 
 def extract_world_mortality_s3(
     bucket: str,
     prefix: str,
@@ -164,10 +211,25 @@ def extract_world_mortality_s3(
     region: str = "us-east-1",
 ) -> pd.DataFrame:
     """
-    Punto de entrada del extractor S3.
+    Orquestador principal del extractor del World Mortality Dataset en AWS S3.
 
-    Retorna:
-        pd.DataFrame con todos los registros listos para el Sandbox.
+    Se encarga de coordinar la autenticación, listar los archivos disponibles, 
+    descargar cada uno a memoria RAM de forma iterativa, estandarizarlos y 
+    consolidarlos en un único DataFrame para la ingesta.
+
+    Args:
+        bucket (str): Nombre del bucket de S3.
+        prefix (str): Ruta interna dentro del bucket donde residen los datos.
+        aws_key (str): Access Key ID de IAM.
+        aws_secret (str): Secret Access Key de IAM.
+        region (str, optional): Región de AWS. Por defecto es "us-east-1".
+
+    Returns:
+        pd.DataFrame: Conjunto de datos consolidado con los registros de 
+            todos los archivos procesados.
+
+    Raises:
+        RuntimeError: Si ocurre un fallo global y no se procesa ningún archivo.
     """
     logger.info("=" * 60)
     logger.info("INICIO — Extractor S3 (World Mortality Dataset)")
@@ -208,7 +270,6 @@ def extract_world_mortality_s3(
     logger.info("=" * 60)
 
     return df_consolidado
-
 
 # Ejecucion directa para pruebas locales
 if __name__ == "__main__":

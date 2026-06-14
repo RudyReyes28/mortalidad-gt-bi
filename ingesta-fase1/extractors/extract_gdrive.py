@@ -1,3 +1,12 @@
+"""
+Módulo de extracción de datos de mortalidad desde Google Drive.
+
+Este script se encarga de autenticarse con la API de Google Drive, navegar por 
+la estructura jerárquica de carpetas del INE y descargar de forma secuencial 
+todos los archivos `.xlsx` correspondientes a las defunciones. Además, estandariza 
+las columnas y añade metadatos de trazabilidad.
+"""
+
 import io
 import logging
 from datetime import datetime
@@ -15,7 +24,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("extractor.gdrive")
 
-#  Columnas estandar (schema de referencia 2018-2023) 
+# Columnas estandar (schema de referencia 2018-2023) 
 COLUMNAS_ESTANDAR = [
     "Depreg", "Mupreg", "Mesreg", "Añoreg",
     "Depocu", "Mupocu", "Sexo",
@@ -34,13 +43,17 @@ NOMBRE_CARPETA_INE = "ine"
 NOMBRE_CARPETA_DATOS= "datos"          
 
 
-# Autenticacion 
 def _autenticar(ruta_credenciales: str):
     """
-    Autentica con Google Drive usando una Service Account
-    Retorna el servicio de Drive listo para usar
+    Autentica con la API de Google Drive utilizando una Service Account.
 
+    Args:
+        ruta_credenciales (str): Ruta absoluta o relativa al archivo JSON que 
+            contiene las credenciales de la cuenta de servicio de Google Cloud.
 
+    Returns:
+        googleapiclient.discovery.Resource: Objeto de servicio construido listo 
+            para interactuar con la API de Google Drive (versión v3).
     """
     logger.info("Autenticando con Google Drive API...")
     creds = service_account.Credentials.from_service_account_file(
@@ -51,12 +64,25 @@ def _autenticar(ruta_credenciales: str):
     return servicio
 
 
-#  Buscar carpeta por nombre
 def _buscar_carpeta(servicio, nombre: str, padre_id: str = None) -> str:
     """
-    Busca una carpeta por nombre en Drive y retorna su ID.
-    Si padre_id se especifica, busca solo dentro de esa carpeta.
-    Lanza ValueError si no la encuentra.
+    Busca una carpeta específica por su nombre dentro de Google Drive.
+
+    Realiza una consulta a la API de Drive filtrando por tipo MIME (carpeta) 
+    y verificando que no esté en la papelera. Opcionalmente, restringe la 
+    búsqueda a un directorio padre.
+
+    Args:
+        servicio (googleapiclient.discovery.Resource): Servicio autenticado de Drive.
+        nombre (str): Nombre exacto de la carpeta a buscar.
+        padre_id (str, optional): ID de la carpeta padre donde se realizará 
+            la búsqueda. Por defecto es None (búsqueda global).
+
+    Returns:
+        str: El ID único de la carpeta encontrada en Google Drive.
+
+    Raises:
+        ValueError: Si la carpeta solicitada no es encontrada en Drive.
     """
     query = f"name='{nombre}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
     if padre_id:
@@ -77,11 +103,18 @@ def _buscar_carpeta(servicio, nombre: str, padre_id: str = None) -> str:
     return carpeta_id
 
 
-# Listar archivos xlsx en una carpeta 
 def _listar_archivos_xlsx(servicio, carpeta_id: str) -> list[dict]:
     """
-    Lista todos los archivos .xlsx dentro de la carpeta indicada.
-    Retorna lista de dicts con {id, name}.
+    Lista todos los archivos de Excel (.xlsx) contenidos en una carpeta específica.
+
+    Args:
+        servicio (googleapiclient.discovery.Resource): Servicio autenticado de Drive.
+        carpeta_id (str): ID de la carpeta padre en Drive.
+
+    Returns:
+        list[dict]: Lista de diccionarios, donde cada diccionario contiene las claves 
+            `id` (str) y `name` (str) de los archivos encontrados, ordenados 
+            alfabéticamente/cronológicamente.
     """
     query = (
         f"'{carpeta_id}' in parents"
@@ -95,7 +128,7 @@ def _listar_archivos_xlsx(servicio, carpeta_id: str) -> list[dict]:
         q=query,
         spaces="drive",
         fields="files(id, name)",
-        orderBy="name",          # procesa en orden cronológico (2018, 2019…)
+        orderBy="name",          
     ).execute()
 
     archivos = resultado.get("files", [])
@@ -103,11 +136,20 @@ def _listar_archivos_xlsx(servicio, carpeta_id: str) -> list[dict]:
     return archivos
 
 
-# Descargar y leer un xlsx desde Drive ¿
 def _descargar_xlsx(servicio, archivo: dict) -> pd.DataFrame:
     """
-    Descarga un archivo xlsx de Drive en memoria y lo lee con pandas
-    Retorna un DataFrame crudo con las columnas del archivo original
+    Descarga un archivo Excel directamente desde Drive hacia la memoria RAM.
+
+    Utiliza `MediaIoBaseDownload` para descargar el flujo binario por fragmentos 
+    (chunks) en un búfer temporal (`io.BytesIO`) y luego lo carga en un DataFrame 
+    de pandas utilizando el motor `openpyxl`.
+
+    Args:
+        servicio (googleapiclient.discovery.Resource): Servicio autenticado de Drive.
+        archivo (dict): Diccionario representativo del archivo con claves `id` y `name`.
+
+    Returns:
+        pd.DataFrame: DataFrame con los datos crudos extraídos del archivo Excel.
     """
     logger.info(f"Descargando: {archivo['name']}...")
     request = servicio.files().get_media(fileId=archivo["id"])
@@ -124,10 +166,20 @@ def _descargar_xlsx(servicio, archivo: dict) -> pd.DataFrame:
     return df
 
 
-# Estandarizar columnas 
 def _estandarizar_columnas(df: pd.DataFrame, nombre_archivo: str) -> pd.DataFrame:
     """
-    Verifica que el DataFrame tenga las columnas estandar.
+    Normaliza el esquema del DataFrame alineándolo al estándar del proyecto.
+
+    Verifica la existencia de todas las columnas esperadas. Si faltan columnas 
+    (como ocurre en los registros de 2024), las crea e imputa con valores NULL. 
+    Posteriormente, reordena el DataFrame al esquema oficial.
+
+    Args:
+        df (pd.DataFrame): DataFrame original extraído del archivo.
+        nombre_archivo (str): Nombre del archivo procesado (para fines de logging).
+
+    Returns:
+        pd.DataFrame: DataFrame estandarizado y ordenado según `COLUMNAS_ESTANDAR`.
     """
     columnas_actuales = set(df.columns)
     columnas_esperadas = set(COLUMNAS_ESTANDAR)
@@ -147,17 +199,20 @@ def _estandarizar_columnas(df: pd.DataFrame, nombre_archivo: str) -> pd.DataFram
             f"[{nombre_archivo}] Columnas extra (no en schema estandar): {sorted(extras)}"
         )
 
-    # Retorna siempre en el orden estandar
     return df[COLUMNAS_ESTANDAR]
 
 
-# Agregar columnas de trazabilidad 
 def _agregar_trazabilidad(df: pd.DataFrame, nombre_archivo: str) -> pd.DataFrame:
     """
-    Agrega columnas de control para el Sandbox
-        fuente_origen: identificador de la fuente
-        archivo_origen: nombre del archivo xlsx descargado
-        fecha_carga: timestamp de la ejecución del pipeline
+    Inyecta metadatos de auditoría al conjunto de datos para el Sandbox.
+
+    Args:
+        df (pd.DataFrame): DataFrame con la información estandarizada.
+        nombre_archivo (str): Nombre físico del archivo de origen.
+
+    Returns:
+        pd.DataFrame: El mismo DataFrame incluyendo tres nuevas columnas: 
+            `fuente_origen`, `archivo_origen`, y `fecha_carga`.
     """
     df["fuente_origen"]  = "INE"
     df["archivo_origen"] = nombre_archivo
@@ -165,16 +220,32 @@ def _agregar_trazabilidad(df: pd.DataFrame, nombre_archivo: str) -> pd.DataFrame
     return df
 
 
-# Funcion principal exportada
 def extract_gdrive(ruta_credenciales: str) -> pd.DataFrame:
-    
+    """
+    Función orquestadora para la extracción de defunciones del INE desde Google Drive.
+
+    Ejecuta el ciclo de vida completo: autenticación, navegación al directorio 
+    `mortalidad-gt-fuentes/ine/datos/`, descarga iterativa de todos los archivos 
+    `.xlsx`, estandarización de sus columnas, inyección de trazabilidad y 
+    concatenación en un único conjunto de datos final.
+
+    Args:
+        ruta_credenciales (str): Ruta al archivo JSON con las credenciales IAM.
+
+    Returns:
+        pd.DataFrame: Un único DataFrame consolidado con todas las filas de 
+            los archivos analizados.
+
+    Raises:
+        FileNotFoundError: Si la carpeta objetivo en Drive no contiene archivos.
+        RuntimeError: Si ocurre un fallo global que impide procesar cualquier archivo.
+    """
     logger.info("=" * 60)
     logger.info("INICIO - Extractor Google Drive (INE)")
     logger.info("=" * 60)
 
     servicio = _autenticar(ruta_credenciales)
 
-    # Navegar mortalidad-gt-fuentes/ine/datos/
     id_raiz= _buscar_carpeta(servicio, NOMBRE_CARPETA_RAIZ)
     id_ine = _buscar_carpeta(servicio, NOMBRE_CARPETA_INE,   padre_id=id_raiz)
     id_datos = _buscar_carpeta(servicio, NOMBRE_CARPETA_DATOS, padre_id=id_ine)
@@ -216,14 +287,12 @@ def extract_gdrive(ruta_credenciales: str) -> pd.DataFrame:
 
     return df_consolidado
 
-
 # Ejecucion para pruebas
 if __name__ == "__main__":
     import os
     from pathlib import Path
     from dotenv import load_dotenv
 
-    
     env_path = Path(__file__).resolve().parents[2] / ".env"
     load_dotenv(env_path)
     print(f"Cargando .env desde: {env_path}")

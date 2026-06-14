@@ -13,6 +13,27 @@ theme:
     - navigation.sections 
     - toc.integrate       
 
+markdown_extensions:
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true   
+  - pymdownx.superfences        
+  - admonition                  
+  - pymdownx.details
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: 
+            - ingesta-fase1          
+            - ingesta-fase1
+          options:
+            docstring_style: google
+            show_source: true
+
 nav:
   - Inicio: index.md
   - Fuentes de Datos:
@@ -22,6 +43,10 @@ nav:
   - Pipeline:
     - Arquitectura: pipeline/arquitectura.md
     - Ingesta: pipeline/ingesta.md
+    - Extractores:
+      - Google Drive (INE): pipeline/extractores/extract_gdrive.md
+      - AWS S3 (World Mortality): pipeline/extractores/extract_world_mortality_s3.md
+      - RDS Centroamérica: pipeline/extractores/extract_centroamerica_rds.md
   - Trazabilidad:
     - Data Lineage: trazabilidad/data-lineage.md
     - Solicitud RENAP: trazabilidad/renap/solicitud.md
