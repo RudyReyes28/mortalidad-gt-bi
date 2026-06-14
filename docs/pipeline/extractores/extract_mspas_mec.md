@@ -2,7 +2,7 @@
 
 **Fuente:** Google Drive — `mortalidad-gt-fuentes/mspas/mec/` (13 archivos CSV)  
 **Destino:** `sandbox.sandbox_mspas_mec`  
-**Autor:** Eiler Ajú  
+**Autor:** Eiler Gómez  
 
 Extrae los registros de enfermedades crónicas no transmisibles publicados por el MSPAS
 a través de su portal de datos abiertos. Los datos cubren el período 2012–2024 en 13

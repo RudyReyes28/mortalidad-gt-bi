@@ -2,7 +2,7 @@
 
 **Fuente:** Google Drive — `mortalidad-gt-fuentes/mspas/covid/` (1 archivo CSV)  
 **Destino:** `sandbox.sandbox_mspas_covid`  
-**Autor:** Eiler Ajú  
+**Autor:** Eiler Gómez  
 
 Extrae el registro de fallecidos confirmados por COVID-19 publicado por el MSPAS
 en su tablero epidemiológico (`tableros.mspas.gob.gt/covid`). El dataset cubre desde
