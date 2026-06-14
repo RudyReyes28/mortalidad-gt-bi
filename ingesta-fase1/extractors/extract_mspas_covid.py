@@ -1,16 +1,15 @@
 """
-Extractor MSPAS — Fallecidos COVID-19 por municipio (2020–2024)
-Fuente  : Google Drive → mortalidad-gt-fuentes/mspas/covid/  contiene un CSV con datos de fallecidos por COVID-19 por municipio y fecha.
-          Descargado de https://tableros.mspas.gob.gt/covid/
+Módulo de extracción de fallecidos COVID-19 del MSPAS desde Google Drive.
 
-Transformación aplicada:
-  El CSV original tiene formato ANCHO (wide):
-    departamento | municipio | poblacion | 2020-03-15 | 2020-03-21 | ... (1 col por fecha)
+Este script se encarga de autenticarse con la API de Google Drive, navegar
+al directorio `mortalidad-gt-fuentes/mspas/covid/` y descargar el CSV de
+fallecidos por COVID-19 publicado en el tablero epidemiológico del MSPAS
+(https://tableros.mspas.gob.gt/covid/).
 
-  Este extractor pretende convertirlo a formato LARGO (long/tidy) antes del Sandbox:
-    departamento | municipio | poblacion | fecha_fallecimiento | fallecidos
-  
-  Solo se conservan filas con fallecidos > 0 (las filas con 0 no aportan al análisis).
+El archivo original tiene formato ancho (wide): una columna por cada fecha
+con fallecidos registrados. Este módulo lo transforma a formato largo (long/tidy)
+mediante `pd.melt()` antes de cargarlo al Sandbox, normalizando el dato para
+que sea consultable por fecha y municipio.
 """
 
 import io
@@ -33,11 +32,11 @@ logger = logging.getLogger("extractor.mspas_covid")
 # Configuración
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
-NOMBRE_CARPETA_RAIZ   = "mortalidad-gt-fuentes"
-NOMBRE_CARPETA_MSPAS  = "mspas"
-NOMBRE_CARPETA_COVID  = "covid"
+NOMBRE_CARPETA_RAIZ  = "mortalidad-gt-fuentes"
+NOMBRE_CARPETA_MSPAS = "mspas"
+NOMBRE_CARPETA_COVID = "covid"
 
-# Columnas fijas
+# Columnas fijas de identificación (no son fechas)
 COLUMNAS_ID = [
     "departamento", "codigo_departamento",
     "municipio", "codigo_municipio", "poblacion"
@@ -47,9 +46,18 @@ COLUMNAS_ID = [
 COLUMNAS_ESTANDAR = COLUMNAS_ID + ["fecha_fallecimiento", "fallecidos"]
 
 
-# Autenticación
 def _autenticar(ruta_credenciales: str):
-    """Autentica con Google Drive API. Retorna el servicio listo para usar."""
+    """
+    Autentica con la API de Google Drive utilizando una Service Account.
+
+    Args:
+        ruta_credenciales (str): Ruta absoluta al archivo JSON que contiene
+            las credenciales de la cuenta de servicio de Google Cloud.
+
+    Returns:
+        googleapiclient.discovery.Resource: Objeto de servicio listo para
+            interactuar con la API de Google Drive (versión v3).
+    """
     logger.info("Autenticando con Google Drive API...")
     creds = service_account.Credentials.from_service_account_file(
         ruta_credenciales, scopes=SCOPES
@@ -59,9 +67,26 @@ def _autenticar(ruta_credenciales: str):
     return servicio
 
 
-# Buscar carpeta por nombre
 def _buscar_carpeta(servicio, nombre: str, padre_id: str = None) -> str:
-    """Busca una carpeta por nombre en Drive y retorna su ID."""
+    """
+    Busca una carpeta específica por su nombre dentro de Google Drive.
+
+    Realiza una consulta a la API de Drive filtrando por tipo MIME (carpeta)
+    y verificando que no esté en la papelera. Opcionalmente restringe la
+    búsqueda a un directorio padre.
+
+    Args:
+        servicio (googleapiclient.discovery.Resource): Servicio autenticado de Drive.
+        nombre (str): Nombre exacto de la carpeta a buscar.
+        padre_id (str, optional): ID de la carpeta padre donde se realizará
+            la búsqueda. Por defecto es None (búsqueda global).
+
+    Returns:
+        str: El ID único de la carpeta encontrada en Google Drive.
+
+    Raises:
+        ValueError: Si la carpeta solicitada no es encontrada en Drive.
+    """
     query = f"name='{nombre}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
     if padre_id:
         query += f" and '{padre_id}' in parents"
@@ -79,9 +104,20 @@ def _buscar_carpeta(servicio, nombre: str, padre_id: str = None) -> str:
     return carpeta_id
 
 
-# Buscar el CSV de COVID en la carpeta
 def _buscar_csv_covid(servicio, carpeta_id: str) -> dict:
-    """Retorna el primer CSV encontrado en la carpeta covid/."""
+    """
+    Localiza el archivo CSV de fallecidos COVID dentro de la carpeta `covid/`.
+
+    Args:
+        servicio (googleapiclient.discovery.Resource): Servicio autenticado de Drive.
+        carpeta_id (str): ID de la carpeta `mspas/covid/` en Drive.
+
+    Returns:
+        dict: Diccionario con claves `id` y `name` del primer CSV encontrado.
+
+    Raises:
+        FileNotFoundError: Si no existe ningún CSV en la carpeta indicada.
+    """
     query = (
         f"'{carpeta_id}' in parents"
         " and trashed=false"
@@ -99,9 +135,21 @@ def _buscar_csv_covid(servicio, carpeta_id: str) -> dict:
     return archivos[0]
 
 
-# Descargar CSV desde Drive en memoria
 def _descargar_csv(servicio, archivo: dict) -> pd.DataFrame:
-    """Descarga el CSV de Drive en memoria y lo lee con pandas."""
+    """
+    Descarga el CSV de fallecidos COVID directamente desde Drive hacia memoria RAM.
+
+    Utiliza `MediaIoBaseDownload` para descargar el flujo binario por fragmentos
+    en un búfer temporal (`io.BytesIO`) y lo carga en un DataFrame de pandas.
+
+    Args:
+        servicio (googleapiclient.discovery.Resource): Servicio autenticado de Drive.
+        archivo (dict): Diccionario con claves `id` y `name` del archivo.
+
+    Returns:
+        pd.DataFrame: DataFrame crudo en formato ancho (wide), con una columna
+            por cada fecha de fallecimiento registrada (1,058 columnas de fechas).
+    """
     logger.info(f"Descargando: {archivo['name']}...")
     request = servicio.files().get_media(fileId=archivo["id"])
     buffer = io.BytesIO()
@@ -117,13 +165,34 @@ def _descargar_csv(servicio, archivo: dict) -> pd.DataFrame:
     return df
 
 
-# Transformar de formato ancho a largo
 def _wide_to_long(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Convierte el DataFrame de formato ancho a formato largo (melt).
+    Transforma el DataFrame de formato ancho (wide) a formato largo (long/tidy).
 
-    Antes:  departamento | municipio | poblacion | 2020-03-15 | 2020-03-21 | ...
-    Después: departamento | municipio | poblacion | fecha_fallecimiento | fallecidos
+    El CSV original del MSPAS contiene 1,063 columnas: 5 de identificación del
+    municipio y 1,058 columnas de fechas (una por cada día con fallecidos). Esta
+    función aplica `pd.melt()` para convertirlo a un registro por municipio-fecha,
+    omitiendo las filas con cero fallecidos.
+
+    **Antes (wide):**
+
+    | municipio | 2020-03-15 | 2020-03-21 |
+    |---|---|---|
+    | GUATEMALA | 2 | 1 |
+
+    **Después (long):**
+
+    | municipio | fecha_fallecimiento | fallecidos |
+    |---|---|---|
+    | GUATEMALA | 2020-03-15 | 2 |
+    | GUATEMALA | 2020-03-21 | 1 |
+
+    Args:
+        df (pd.DataFrame): DataFrame crudo en formato ancho descargado de Drive.
+
+    Returns:
+        pd.DataFrame: DataFrame en formato largo con columnas definidas en
+            `COLUMNAS_ESTANDAR`. Solo incluye filas con `fallecidos > 0`.
     """
     cols_fechas = [c for c in df.columns if c[:2] in ("20", "19") and "-" in c]
     logger.info(
@@ -145,14 +214,12 @@ def _wide_to_long(df: pd.DataFrame) -> pd.DataFrame:
         value_name="fallecidos",
     )
 
-    # Convertir tipos
     df_long["fecha_fallecimiento"]  = pd.to_datetime(df_long["fecha_fallecimiento"], errors="coerce")
     df_long["fallecidos"]           = pd.to_numeric(df_long["fallecidos"], errors="coerce").fillna(0).astype(int)
     df_long["codigo_departamento"]  = pd.to_numeric(df_long["codigo_departamento"], errors="coerce").astype("Int64")
     df_long["codigo_municipio"]     = pd.to_numeric(df_long["codigo_municipio"],    errors="coerce").astype("Int64")
     df_long["poblacion"]            = pd.to_numeric(df_long["poblacion"],           errors="coerce").astype("Int64")
 
-    # Filtrar filas con 0 fallecidos
     total_antes   = len(df_long)
     df_long       = df_long[df_long["fallecidos"] > 0].copy()
     total_despues = len(df_long)
@@ -164,23 +231,44 @@ def _wide_to_long(df: pd.DataFrame) -> pd.DataFrame:
     return df_long[COLUMNAS_ESTANDAR]
 
 
-# Agregar columnas de trazabilidad
 def _agregar_trazabilidad(df: pd.DataFrame, nombre_archivo: str) -> pd.DataFrame:
-    """Agrega columnas de control para el Sandbox."""
+    """
+    Inyecta metadatos de auditoría al conjunto de datos para el Sandbox.
+
+    Args:
+        df (pd.DataFrame): DataFrame con la información en formato largo.
+        nombre_archivo (str): Nombre físico del archivo CSV de origen.
+
+    Returns:
+        pd.DataFrame: El mismo DataFrame incluyendo tres nuevas columnas:
+            `fuente_origen`, `archivo_origen` y `fecha_carga`.
+    """
     df["fuente_origen"]  = "MSPAS_COVID"
     df["archivo_origen"] = nombre_archivo
     df["fecha_carga"]    = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return df
 
 
-# Función principal exportada
 def extract_mspas_covid(ruta_credenciales: str) -> pd.DataFrame:
     """
-    Punto de entrada del extractor MSPAS COVID.
-    Navega: mortalidad-gt-fuentes → mspas → covid → descarga el CSV y lo convierte a formato largo.
+    Función orquestadora para la extracción de fallecidos COVID-19 del MSPAS desde Google Drive.
 
-    Retorna:
-        pd.DataFrame en formato largo (municipio × fecha), listo para el Sandbox.
+    Ejecuta el ciclo de vida completo: autenticación, navegación al directorio
+    `mortalidad-gt-fuentes/mspas/covid/`, descarga del CSV, transformación de
+    formato ancho a largo (`pd.melt()`), conversión de tipos, inyección de
+    trazabilidad y retorno del DataFrame final listo para el Sandbox.
+
+    Args:
+        ruta_credenciales (str): Ruta al archivo JSON con las credenciales IAM
+            de la Service Account de Google Cloud.
+
+    Returns:
+        pd.DataFrame: DataFrame en formato largo (municipio × fecha) con los
+            fallecidos confirmados por COVID-19, listo para el Sandbox.
+
+    Raises:
+        FileNotFoundError: Si la carpeta `mspas/covid/` en Drive no contiene el CSV.
+        ValueError: Si alguna carpeta intermedia no es encontrada en Drive.
     """
     logger.info("=" * 60)
     logger.info("INICIO — Extractor MSPAS COVID (Google Drive / CSV)")
@@ -188,7 +276,6 @@ def extract_mspas_covid(ruta_credenciales: str) -> pd.DataFrame:
 
     servicio = _autenticar(ruta_credenciales)
 
-    # Navegar mortalidad-gt-fuentes/mspas/covid/
     id_raiz  = _buscar_carpeta(servicio, NOMBRE_CARPETA_RAIZ)
     id_mspas = _buscar_carpeta(servicio, NOMBRE_CARPETA_MSPAS, padre_id=id_raiz)
     id_covid = _buscar_carpeta(servicio, NOMBRE_CARPETA_COVID,  padre_id=id_mspas)

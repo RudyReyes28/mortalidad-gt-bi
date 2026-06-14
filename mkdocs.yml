@@ -49,6 +49,8 @@ nav:
       - Google Drive (INE): pipeline/extractores/extract_gdrive.md
       - AWS S3 (World Mortality): pipeline/extractores/extract_world_mortality_s3.md
       - RDS Centroamérica: pipeline/extractores/extract_centroamerica_rds.md
+      - MSPAS Enfermedades Crónicas: pipeline/extractores/extract_mspas_mec.md
+      - MSPAS Fallecidos COVID-19: pipeline/extractores/extract_mspas_covid.md
     - Loaders:
       - Sandbox: pipeline/loaders/load_sandbox.md
   - Trazabilidad:
