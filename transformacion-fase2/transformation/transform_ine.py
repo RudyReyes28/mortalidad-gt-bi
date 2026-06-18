@@ -136,7 +136,7 @@ def transform_ine_stage(db_url: str):
     dicc_variables = _construir_diccionario(df_dicc)
     dicc_cie10 = dict(zip(df_cie["codigo_cie10"].astype(str).str.strip().str.upper(), df_cie["descripcion"]))
 
-    # 4. Transformaciones de Mapeo (La Magia del Diccionario)
+    # 4. Transformaciones de Mapeo
     print_log("Traduciendo códigos usando el diccionario oficial del INE...")
     
     df["nombre_depto_registro"]   = df["Depreg"].apply(lambda x: _resolver_codigo(x, MAPEO_VARIABLES["Depreg"], dicc_variables))
