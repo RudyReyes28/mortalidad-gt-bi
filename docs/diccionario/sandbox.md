@@ -240,3 +240,21 @@ Las seis tablas comparten las mismas columnas de control agregadas automáticame
 
 !!! info "Anti-duplicados"
     Cada ejecución del pipeline aplica `if_exists='replace'` — la tabla se trunca y recarga completamente. La columna `fecha_carga` refleja la última ejecución exitosa.
+---
+
+## Modelo Entidad-Relación (ERD) — Schema Sandbox
+
+El siguiente diagrama fue producido en **Oracle SQL Developer Data Modeler** a partir de las tablas que se crearon
+en la base de datos generado por el pipeline. Muestra las seis tablas del schema `sandbox` con sus columnas
+y tipos de dato tal como quedan persistidas en PostgreSQL después de la ingesta.
+
+### Diagrama ERD
+
+![ERD Schema Sandbox](img/ERD_Modeler.jpeg)
+
+### Evidencia de trabajo en Data Modeler
+
+La siguiente captura muestra el entorno de Oracle SQL Developer Data Modeler con el modelo
+relacional realizado en dicha herramienta.
+
+![Evidencia Oracle SQL Developer Data Modeler](img/EvidenciaTRabajoModeler.jpeg)
