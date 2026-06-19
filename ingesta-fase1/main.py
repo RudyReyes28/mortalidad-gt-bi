@@ -51,6 +51,7 @@ from extractors.extract_world_mortality_s3 import extract_world_mortality_s3
 from extractors.extract_sharepoint import extract_sharepoint 
 from extractors.extract_mspas_mec import extract_mspas_mec
 from extractors.extract_mspas_covid import extract_mspas_covid
+from extractors.extract_covid_mundial_s3 import extract_covid_mundial_s3
 from extractors.extract_centroamerica_rds import extract_rds
 
 from loaders.load_sandbox import load_sandbox
@@ -162,6 +163,18 @@ def _construir_fuentes(config: dict) -> dict:
          "extractor": extract_rds,
          "kwargs": {"db_url": config["rds_url"]},
      }
+
+    fuentes["covid_mundial"] = {
+        "descripcion": "COVID Mundial OMS — casos y muertes globales (AWS S3)",
+        "extractor": extract_covid_mundial_s3,
+        "kwargs": {
+            "bucket":     config["s3_bucket"],
+            "aws_key":    config["aws_access_key"],
+            "aws_secret": config["aws_secret_key"],
+            "db_url":     config["sandbox_url"],
+            "region":     config["aws_region"],
+        },
+    }
 
     return fuentes
 
@@ -302,7 +315,7 @@ if __name__ == "__main__":
         "--fuente",
         type=str,
         nargs="+",
-        choices=["ine", "world_mortality", "mspas_mec", "mspas_covid", "centroamerica", "oms"],   
+        choices=["ine", "world_mortality", "mspas_mec", "mspas_covid", "centroamerica", "oms", "covid_mundial"],   
         help="Fuente(s) específica(s) a correr. Sin argumento corre todas las activas.",
         default=None,
     )

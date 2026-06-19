@@ -11,20 +11,19 @@ from sqlalchemy import create_engine, text
 Script de creación y carga de dimensiones del Data Warehouse.
 (create_dimensions.py)
 
-Lee las tablas Stage para construir los catálogos de cada dimensión
-y los carga en el schema 'dw' de ambos destinos:
-    - DW local    (DW_DB_URL)
-    - DW en nube  (DW_CLOUD_URL)
+Arquitectura Galaxy Schema — PDF Decisiones de Diseño Fase 2:
 
-IMPORTANTE: Este script debe ejecutarse ANTES de cualquier load_fact_*.py.
+Dimensiones conformadas (7):
+    dw.dim_tiempo           — compartida por las 5 fact tables
+    dw.dim_sexo             — fact_defunciones_gt + fact_morbimortalidad_mec
+    dw.dim_grupo_etario     — fact_defunciones_gt + fact_morbimortalidad_mec
+    dw.dim_causa_cie10      — fact_defunciones_gt + fact_morbimortalidad_mec
+    dw.dim_geografia_gt     — fact_defunciones_gt + fact_mortalidad_covid_gt + fact_morbimortalidad_mec
+                              SCD Tipo 2 (preserva historial de cambios administrativos)
+    dw.dim_geografia_mundial — fact_mortalidad_mundial + fact_covid_mundial
+    dw.dim_fuente           — todas las 5 fact tables
 
-Dimensiones que crea:
-    dw.dim_tiempo        — años, meses, trimestres y períodos
-    dw.dim_geografia     — departamentos, municipios, países y regiones
-    dw.dim_causa_cie10   — códigos CIE-10, descripciones y capítulos
-    dw.dim_sexo          — catálogo de sexo estandarizado
-    dw.dim_grupo_etario  — rangos de edad homologados
-    dw.dim_fuente        — sistemas de origen de los datos
+IMPORTANTE: Ejecutar ANTES de cualquier load_fact_*.py
 """
 
 
@@ -34,18 +33,7 @@ def print_log(mensaje):
     sys.stdout.flush()
 
 
-REGIONES = {
-    "GTM": "Guatemala", "HND": "Centroamerica", "SLV": "Centroamerica",
-    "NIC": "Centroamerica", "CRI": "Centroamerica", "PAN": "Centroamerica",
-    "BLZ": "Centroamerica", "PER": "Sudamerica", "BRA": "Sudamerica",
-    "COL": "Sudamerica", "ECU": "Sudamerica", "BOL": "Sudamerica",
-    "ARG": "Sudamerica", "CHL": "Sudamerica", "USA": "Norteamerica",
-    "MEX": "Norteamerica", "CAN": "Norteamerica", "ESP": "Europa",
-    "ITA": "Europa", "SWE": "Europa", "GBR": "Europa", "DEU": "Europa",
-    "FRA": "Europa", "PRT": "Europa", "JPN": "Asia-Oceania",
-    "KOR": "Asia-Oceania", "NZL": "Asia-Oceania", "AUS": "Asia-Oceania",
-}
-
+# ── Capítulos y categorías CIE-10 ────────────────────────────────────────────
 CAPITULOS_CIE10 = {
     "A": "Enfermedades infecciosas y parasitarias",
     "B": "Enfermedades infecciosas y parasitarias",
@@ -75,28 +63,64 @@ CAPITULOS_CIE10 = {
 
 CATEGORIAS_CIE10 = {
     "A": "Infecciosa", "B": "Infecciosa", "C": "Cronica", "D": "Cronica",
-    "E": "Cronica", "F": "Cronica", "G": "Cronica", "H": "Cronica",
-    "I": "Cronica", "J": "Cronica", "K": "Cronica", "L": "Cronica",
-    "M": "Cronica", "N": "Cronica", "O": "Materna", "P": "Perinatal",
-    "Q": "Congenita", "R": "Otra", "S": "Externa", "T": "Externa",
-    "U": "COVID-19", "V": "Externa", "W": "Externa", "X": "Externa",
-    "Y": "Externa", "Z": "Otra",
+    "E": "Cronica",   "F": "Cronica",   "G": "Cronica", "H": "Cronica",
+    "I": "Cronica",   "J": "Cronica",   "K": "Cronica", "L": "Cronica",
+    "M": "Cronica",   "N": "Cronica",   "O": "Materna", "P": "Perinatal",
+    "Q": "Congenita", "R": "Otra",      "S": "Externa", "T": "Externa",
+    "U": "COVID-19",  "V": "Externa",   "W": "Externa", "X": "Externa",
+    "Y": "Externa",   "Z": "Otra",
+}
+
+# ── Mapeo ISO2 → ISO3 para dim_geografia_mundial ─────────────────────────────
+ISO2_A_ISO3 = {
+    "GT": "GTM", "HN": "HND", "SV": "SLV", "NI": "NIC", "CR": "CRI",
+    "PA": "PAN", "BZ": "BLZ", "PE": "PER", "BO": "BOL", "EC": "ECU",
+    "BR": "BRA", "CO": "COL", "AR": "ARG", "CL": "CHL", "MX": "MEX",
+    "US": "USA", "CA": "CAN", "ES": "ESP", "IT": "ITA", "GB": "GBR",
+    "DE": "DEU", "FR": "FRA", "SE": "SWE", "PT": "PRT", "RU": "RUS",
+    "UA": "UKR", "PL": "POL", "JP": "JPN", "KR": "KOR", "TR": "TUR",
+    "AU": "AUS", "NZ": "NZL",
+}
+
+REGIONES_ISO3 = {
+    "GTM": "Centroamerica", "HND": "Centroamerica", "SLV": "Centroamerica",
+    "NIC": "Centroamerica", "CRI": "Centroamerica", "PAN": "Centroamerica",
+    "BLZ": "Centroamerica", "PER": "Sudamerica",   "BRA": "Sudamerica",
+    "COL": "Sudamerica",   "ECU": "Sudamerica",   "BOL": "Sudamerica",
+    "ARG": "Sudamerica",   "CHL": "Sudamerica",   "USA": "Norteamerica",
+    "MEX": "Norteamerica", "CAN": "Norteamerica", "ESP": "Europa",
+    "ITA": "Europa",       "SWE": "Europa",       "GBR": "Europa",
+    "DEU": "Europa",       "FRA": "Europa",       "PRT": "Europa",
+    "RUS": "Europa",       "UKR": "Europa",       "POL": "Europa",
+    "JPN": "Asia-Oceania", "KOR": "Asia-Oceania", "TUR": "Asia-Oceania",
+    "AUS": "Asia-Oceania", "NZL": "Asia-Oceania",
 }
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# 1. dim_tiempo
+# ────────────────────────────────────────────────────────────────────────────
 def _build_dim_tiempo(engine_sandbox) -> pd.DataFrame:
+    """
+    Recopila años y meses únicos de las 5 tablas Stage.
+    Calcula trimestre y período para cada combinación.
+    """
     print_log("Construyendo dim_tiempo...")
-    q_mec     = "SELECT DISTINCT anio, NULL::smallint AS mes FROM stage.stage_mspas_mec WHERE anio IS NOT NULL"
-    q_covid   = "SELECT DISTINCT anio, mes FROM stage.stage_mspas_covid WHERE anio IS NOT NULL"
-    q_ine     = "SELECT DISTINCT anio_ocurrencia AS anio, mes_ocurrencia AS mes FROM stage.stage_defunciones_gt WHERE anio_ocurrencia IS NOT NULL"
-    q_mundial = "SELECT DISTINCT anio, NULL::smallint AS mes FROM stage.stage_mortalidad_mundial WHERE anio IS NOT NULL"
+
+    queries = [
+        "SELECT DISTINCT anio, NULL::smallint AS mes FROM stage.stage_mspas_mec WHERE anio IS NOT NULL",
+        "SELECT DISTINCT anio, mes FROM stage.stage_mspas_covid WHERE anio IS NOT NULL",
+        "SELECT DISTINCT anio_ocurrencia AS anio, mes_ocurrencia AS mes FROM stage.stage_defunciones_gt WHERE anio_ocurrencia IS NOT NULL",
+        "SELECT DISTINCT anio, NULL::smallint AS mes FROM stage.stage_mortalidad_mundial WHERE anio IS NOT NULL",
+        "SELECT DISTINCT anio, mes FROM stage.stage_covid_mundial WHERE anio IS NOT NULL",
+    ]
 
     dfs = []
-    for q in [q_mec, q_covid, q_ine, q_mundial]:
+    for q in queries:
         try:
             dfs.append(pd.read_sql(q, engine_sandbox))
         except Exception as e:
-            print_log(f"  Advertencia al leer Stage: {e}")
+            print_log(f"  Advertencia: {e}")
 
     df = pd.concat(dfs, ignore_index=True).drop_duplicates()
     df.columns = ["anio", "mes"]
@@ -122,51 +146,118 @@ def _build_dim_tiempo(engine_sandbox) -> pd.DataFrame:
     return df
 
 
-def _build_dim_geografia(engine_sandbox) -> pd.DataFrame:
-    print_log("Construyendo dim_geografia...")
-    q_gt = """
-        SELECT DISTINCT nombre_depto_ocurrencia AS departamento,
-                        nombre_muni_ocurrencia  AS municipio,
-               'Guatemala' AS pais, 'GTM' AS iso3c, 'Guatemala' AS region
+# ────────────────────────────────────────────────────────────────────────────
+# 2. dim_geografia_gt  (SCD Tipo 2)
+# ────────────────────────────────────────────────────────────────────────────
+def _build_dim_geografia_gt(engine_sandbox) -> pd.DataFrame:
+    """
+    Dimensión geográfica para fuentes guatemaltecas (depto/municipio).
+    Implementa SCD Tipo 2: cada registro tiene fecha_inicio_vigencia,
+    fecha_fin_vigencia y es_version_actual para preservar historial
+    de cambios administrativos en el período 2015-2024.
+    En esta versión inicial todos los registros son versión 1 (vigentes).
+    """
+    print_log("Construyendo dim_geografia_gt (SCD Tipo 2)...")
+
+    q = """
+        SELECT DISTINCT nombre_depto_ocurrencia AS nombre_departamento,
+                        nombre_muni_ocurrencia  AS nombre_municipio
         FROM stage.stage_defunciones_gt
         WHERE nombre_depto_ocurrencia IS NOT NULL
         UNION
-        SELECT DISTINCT departamento, municipio,
-               'Guatemala' AS pais, 'GTM' AS iso3c, 'Guatemala' AS region
+        SELECT DISTINCT departamento AS nombre_departamento,
+                        municipio   AS nombre_municipio
         FROM stage.stage_mspas_mec
         WHERE departamento IS NOT NULL
         UNION
-        SELECT DISTINCT departamento, municipio,
-               'Guatemala' AS pais, 'GTM' AS iso3c, 'Guatemala' AS region
+        SELECT DISTINCT departamento AS nombre_departamento,
+                        municipio   AS nombre_municipio
         FROM stage.stage_mspas_covid
         WHERE departamento IS NOT NULL
     """
-    q_int = """
-        SELECT DISTINCT NULL AS departamento, NULL AS municipio,
-               pais, iso3c, NULL AS region
-        FROM stage.stage_mortalidad_mundial
-        WHERE pais IS NOT NULL
-    """
-    dfs = []
-    for q in [q_gt, q_int]:
-        try:
-            dfs.append(pd.read_sql(q, engine_sandbox))
-        except Exception as e:
-            print_log(f"  Advertencia: {e}")
+    try:
+        df = pd.read_sql(q, engine_sandbox)
+    except Exception as e:
+        print_log(f"  Advertencia: {e}")
+        df = pd.DataFrame(columns=["nombre_departamento", "nombre_municipio"])
 
-    df = pd.concat(dfs, ignore_index=True).drop_duplicates()
-    df["region"] = df.apply(
-        lambda r: REGIONES.get(str(r["iso3c"]).strip().upper(), "Otro")
-        if pd.isna(r["region"]) and pd.notna(r["iso3c"])
-        else r["region"],
-        axis=1
-    )
+    df.columns = ["nombre_departamento", "nombre_municipio"]
     df = df.drop_duplicates().reset_index(drop=True)
+
+    # SCD Tipo 2 — columnas de control
+    df["codigo_departamento"]   = None   # se puede enriquecer con catálogo oficial
+    df["codigo_municipio"]      = None
+    df["region"]                = "Guatemala"
+    df["pais"]                  = "Guatemala"
+    df["iso3c"]                 = "GTM"
+    df["fecha_inicio_vigencia"] = "2015-01-01"
+    df["fecha_fin_vigencia"]    = None   # NULL = versión vigente actual
+    df["es_version_actual"]     = True
+    df["version"]               = 1
+
     df.insert(0, "id_geografia", range(1, len(df) + 1))
-    print_log(f"  -> {len(df):,} registros en dim_geografia")
+    print_log(f"  -> {len(df):,} registros en dim_geografia_gt (versión 1 — vigentes)")
     return df
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# 3. dim_geografia_mundial
+# ────────────────────────────────────────────────────────────────────────────
+def _build_dim_geografia_mundial(engine_sandbox) -> pd.DataFrame:
+    """
+    Dimensión geográfica para fuentes internacionales (país/región).
+    Separada de dim_geografia_gt porque tienen grano geográfico distinto
+    (nivel país vs nivel municipio). SCD Tipo 1.
+    Incluye ISO2 (para mapear desde stage_covid_mundial) e ISO3.
+    """
+    print_log("Construyendo dim_geografia_mundial...")
+
+    # Desde stage_mortalidad_mundial (tiene iso3c)
+    q_mundial = """
+        SELECT DISTINCT pais AS nombre_pais, iso3c
+        FROM stage.stage_mortalidad_mundial
+        WHERE pais IS NOT NULL AND iso3c IS NOT NULL
+    """
+    # Desde stage_covid_mundial (tiene country_code = ISO2)
+    q_covid = """
+        SELECT DISTINCT country_name AS nombre_pais, country_code AS iso2
+        FROM stage.stage_covid_mundial
+        WHERE country_name IS NOT NULL
+    """
+
+    dfs = []
+    try:
+        df_m = pd.read_sql(q_mundial, engine_sandbox)
+        df_m["iso2"] = df_m["iso3c"].map({v: k for k, v in ISO2_A_ISO3.items()})
+        dfs.append(df_m)
+    except Exception as e:
+        print_log(f"  Advertencia mundial: {e}")
+
+    try:
+        df_c = pd.read_sql(q_covid, engine_sandbox)
+        df_c["iso3c"] = df_c["iso2"].map(ISO2_A_ISO3)
+        dfs.append(df_c)
+    except Exception as e:
+        print_log(f"  Advertencia covid mundial: {e}")
+
+    if not dfs:
+        df = pd.DataFrame(columns=["nombre_pais", "iso3c", "iso2"])
+    else:
+        df = pd.concat(dfs, ignore_index=True).drop_duplicates(
+            subset=["iso3c"]
+        ).reset_index(drop=True)
+
+    df["region"] = df["iso3c"].map(REGIONES_ISO3).fillna("Otro")
+
+    df = df[["nombre_pais", "iso3c", "iso2", "region"]].drop_duplicates().reset_index(drop=True)
+    df.insert(0, "id_geografia_mundial", range(1, len(df) + 1))
+    print_log(f"  -> {len(df):,} registros en dim_geografia_mundial")
+    return df
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# 4. dim_causa_cie10
+# ────────────────────────────────────────────────────────────────────────────
 def _build_dim_causa_cie10(engine_sandbox) -> pd.DataFrame:
     print_log("Construyendo dim_causa_cie10...")
     q = """
@@ -179,7 +270,7 @@ def _build_dim_causa_cie10(engine_sandbox) -> pd.DataFrame:
     try:
         df = pd.read_sql(q, engine_sandbox)
     except Exception as e:
-        print_log(f"  Advertencia al leer causas: {e}")
+        print_log(f"  Advertencia: {e}")
         df = pd.DataFrame(columns=["codigo_cie10", "descripcion"])
 
     df["codigo_cie10"] = df["codigo_cie10"].astype(str).str.strip().str.upper()
@@ -191,22 +282,24 @@ def _build_dim_causa_cie10(engine_sandbox) -> pd.DataFrame:
     ])
     df = pd.concat([df, especiales], ignore_index=True).drop_duplicates(subset=["codigo_cie10"])
 
-    def capitulo(cod):
-        if not isinstance(cod, str) or len(cod) == 0: return "No especificado"
-        return CAPITULOS_CIE10.get(cod[0].upper(), "Capitulo no identificado")
+    df["capitulo_cie10"] = df["codigo_cie10"].apply(
+        lambda c: CAPITULOS_CIE10.get(c[0].upper(), "Capitulo no identificado")
+        if isinstance(c, str) and len(c) > 0 else "No especificado"
+    )
+    df["categoria"] = df["codigo_cie10"].apply(
+        lambda c: CATEGORIAS_CIE10.get(c[0].upper(), "Otra")
+        if isinstance(c, str) and len(c) > 0 else "Otra"
+    )
 
-    def categoria(cod):
-        if not isinstance(cod, str) or len(cod) == 0: return "Otra"
-        return CATEGORIAS_CIE10.get(cod[0].upper(), "Otra")
-
-    df["capitulo_cie10"] = df["codigo_cie10"].apply(capitulo)
-    df["categoria"]      = df["codigo_cie10"].apply(categoria)
     df = df.drop_duplicates().reset_index(drop=True)
     df.insert(0, "id_causa", range(1, len(df) + 1))
     print_log(f"  -> {len(df):,} registros en dim_causa_cie10")
     return df
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# 5. dim_sexo  (catálogo fijo)
+# ────────────────────────────────────────────────────────────────────────────
 def _build_dim_sexo() -> pd.DataFrame:
     print_log("Construyendo dim_sexo...")
     return pd.DataFrame([
@@ -216,6 +309,9 @@ def _build_dim_sexo() -> pd.DataFrame:
     ])
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# 6. dim_grupo_etario  (catálogo fijo)
+# ────────────────────────────────────────────────────────────────────────────
 def _build_dim_grupo_etario() -> pd.DataFrame:
     print_log("Construyendo dim_grupo_etario...")
     return pd.DataFrame([
@@ -230,19 +326,25 @@ def _build_dim_grupo_etario() -> pd.DataFrame:
     ])
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# 7. dim_fuente  (catálogo fijo — 6 fuentes incluyendo OMS COVID)
+# ────────────────────────────────────────────────────────────────────────────
 def _build_dim_fuente() -> pd.DataFrame:
     print_log("Construyendo dim_fuente...")
     return pd.DataFrame([
-        {"id_fuente": 1, "nombre": "INE",               "tipo": "Nacional",      "pais_cobertura": "Guatemala",     "cobertura_temporal": "2018-2024"},
-        {"id_fuente": 2, "nombre": "MSPAS_MEC",         "tipo": "Institucional", "pais_cobertura": "Guatemala",     "cobertura_temporal": "2012-2024"},
-        {"id_fuente": 3, "nombre": "MSPAS_COVID",       "tipo": "Institucional", "pais_cobertura": "Guatemala",     "cobertura_temporal": "2020-2024"},
-        {"id_fuente": 4, "nombre": "WORLD_MORTALITY",   "tipo": "Internacional", "pais_cobertura": "Global",        "cobertura_temporal": "2015-2024"},
-        {"id_fuente": 5, "nombre": "CENTROAMERICA_RDS", "tipo": "Internacional", "pais_cobertura": "Centroamerica", "cobertura_temporal": "2000-2023"},
+        {"id_fuente": 1, "nombre": "INE",               "tipo": "Nacional",      "pais_cobertura": "Guatemala",    "cobertura_temporal": "2018-2024"},
+        {"id_fuente": 2, "nombre": "MSPAS_MEC",         "tipo": "Institucional", "pais_cobertura": "Guatemala",    "cobertura_temporal": "2012-2024"},
+        {"id_fuente": 3, "nombre": "MSPAS_COVID",       "tipo": "Institucional", "pais_cobertura": "Guatemala",    "cobertura_temporal": "2020-2024"},
+        {"id_fuente": 4, "nombre": "WORLD_MORTALITY",   "tipo": "Internacional", "pais_cobertura": "Global",       "cobertura_temporal": "2015-2024"},
+        {"id_fuente": 5, "nombre": "CENTROAMERICA_RDS", "tipo": "Internacional", "pais_cobertura": "Centroamerica","cobertura_temporal": "2000-2023"},
+        {"id_fuente": 6, "nombre": "OMS_COVID_MUNDIAL", "tipo": "Internacional", "pais_cobertura": "Global",       "cobertura_temporal": "2020-2024"},
     ])
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# Carga a un destino DW
+# ────────────────────────────────────────────────────────────────────────────
 def _cargar_dimensiones(engine_dw, tablas: list, destino: str):
-    """Carga todas las dimensiones en un engine destino."""
     with engine_dw.begin() as conn:
         conn.execute(text("CREATE SCHEMA IF NOT EXISTS dw"))
 
@@ -259,25 +361,30 @@ def _cargar_dimensiones(engine_dw, tablas: list, destino: str):
         print_log(f"  [{destino}] dw.{nombre_tabla}: {len(df):,} registros cargados.")
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# Función principal
+# ────────────────────────────────────────────────────────────────────────────
 def create_dimensions(sandbox_url: str, dw_local_url: str, dw_cloud_url: str = None):
     print_log("Conectando a Sandbox (lectura)...")
     engine_sandbox = create_engine(sandbox_url, pool_pre_ping=True)
 
-    # Construir todas las dimensiones una sola vez
-    dim_tiempo       = _build_dim_tiempo(engine_sandbox)
-    dim_geografia    = _build_dim_geografia(engine_sandbox)
-    dim_causa_cie10  = _build_dim_causa_cie10(engine_sandbox)
-    dim_sexo         = _build_dim_sexo()
-    dim_grupo_etario = _build_dim_grupo_etario()
-    dim_fuente       = _build_dim_fuente()
+    # Construir las 7 dimensiones
+    dim_tiempo             = _build_dim_tiempo(engine_sandbox)
+    dim_geografia_gt       = _build_dim_geografia_gt(engine_sandbox)
+    dim_geografia_mundial  = _build_dim_geografia_mundial(engine_sandbox)
+    dim_causa_cie10        = _build_dim_causa_cie10(engine_sandbox)
+    dim_sexo               = _build_dim_sexo()
+    dim_grupo_etario       = _build_dim_grupo_etario()
+    dim_fuente             = _build_dim_fuente()
 
     tablas = [
-        ("dim_tiempo",       dim_tiempo),
-        ("dim_geografia",    dim_geografia),
-        ("dim_causa_cie10",  dim_causa_cie10),
-        ("dim_sexo",         dim_sexo),
-        ("dim_grupo_etario", dim_grupo_etario),
-        ("dim_fuente",       dim_fuente),
+        ("dim_tiempo",            dim_tiempo),
+        ("dim_geografia_gt",      dim_geografia_gt),
+        ("dim_geografia_mundial", dim_geografia_mundial),
+        ("dim_causa_cie10",       dim_causa_cie10),
+        ("dim_sexo",              dim_sexo),
+        ("dim_grupo_etario",      dim_grupo_etario),
+        ("dim_fuente",            dim_fuente),
     ]
 
     # Cargar en DW local
@@ -300,11 +407,13 @@ def create_dimensions(sandbox_url: str, dw_local_url: str, dw_cloud_url: str = N
     engine_sandbox.dispose()
     print_log("─" * 60)
     print_log("TODAS LAS DIMENSIONES CARGADAS EXITOSAMENTE.")
+    print_log("7 dimensiones: dim_tiempo, dim_geografia_gt (SCD2), dim_geografia_mundial,")
+    print_log("               dim_causa_cie10, dim_sexo, dim_grupo_etario, dim_fuente")
 
 
 if __name__ == "__main__":
     print_log("=" * 60)
-    print_log("INICIANDO JOB: Creacion de Dimensiones DW (local + nube)")
+    print_log("INICIANDO JOB: Creacion de Dimensiones DW (Galaxy Schema)")
     print_log("=" * 60)
 
     env_path = Path(__file__).resolve().parents[2] / ".env"
