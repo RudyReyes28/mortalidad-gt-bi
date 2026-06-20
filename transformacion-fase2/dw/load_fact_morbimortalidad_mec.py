@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -9,157 +10,196 @@ from sqlalchemy import create_engine, text
 
 """
 Carga: stage_mspas_mec -> dw.fact_morbimortalidad_mec
-Grano: año / departamento / causa / grupo_etario / sexo
+Grano: Agregado por año, departamento, municipio, causa, grupo y sexo (>= 2015)
 Galaxy Schema — PDF Decisiones de Diseño Fase 2
 """
 
-
+# =====================================================================
+# LIBRERÍA DE LOGGING LOCAL
+# =====================================================================
 def print_log(mensaje):
     hora_actual = datetime.now().strftime("%H:%M:%S")
     print(f"[{hora_actual}] INFO: {mensaje}")
     sys.stdout.flush()
 
-
 def _cargar_fact(engine_dw, df_fact: pd.DataFrame, destino: str):
+    print_log(f"  [{destino}] Asegurando estructura DDL con Llaves Foráneas Físicas...")
     with engine_dw.begin() as conn:
         conn.execute(text("""
+            CREATE SCHEMA IF NOT EXISTS dw;
+            
             CREATE TABLE IF NOT EXISTS dw.fact_morbimortalidad_mec (
                 id_fact          BIGSERIAL PRIMARY KEY,
-                id_tiempo        INTEGER,
-                id_geografia     INTEGER,
-                id_causa         INTEGER,
-                id_grupo_etario  INTEGER,
-                id_sexo          INTEGER,
-                id_fuente        INTEGER,
-                casos            INTEGER,
+                id_tiempo        INTEGER REFERENCES dw.dim_tiempo(id_tiempo),
+                id_geografia     INTEGER REFERENCES dw.dim_geografia_gt(id_geografia),
+                id_causa         INTEGER REFERENCES dw.dim_causa_cie10(id_causa),
+                id_grupo_etario  INTEGER REFERENCES dw.dim_grupo_etario(id_grupo_etario),
+                id_sexo          INTEGER REFERENCES dw.dim_sexo(id_sexo),
+                id_fuente        INTEGER REFERENCES dw.dim_fuente(id_fuente),
+                casos            BIGINT,
+                periodo          VARCHAR(20),
                 fecha_carga      VARCHAR(30)
             )
         """))
+        
+    print_log(f"  [{destino}] Truncando tabla de hechos (Limpieza Bottom-Up)...")
     with engine_dw.begin() as conn:
         conn.execute(text("TRUNCATE TABLE dw.fact_morbimortalidad_mec RESTART IDENTITY"))
-    print_log(f"  [{destino}] Tabla dw.fact_morbimortalidad_mec truncada.")
+        
+    print_log(f"  [{destino}] Inyectando {len(df_fact):,} registros agrupados...")
     df_fact.to_sql(
         name="fact_morbimortalidad_mec",
         con=engine_dw, schema="dw",
         if_exists="append", index=False,
-        chunksize=2000, method="multi",
+        chunksize=5000, method="multi",
     )
-    print_log(f"  [{destino}] {len(df_fact):,} registros en dw.fact_morbimortalidad_mec.")
-    engine_dw.dispose()
+    print_log(f"  [{destino}] Carga finalizada con éxito.")
 
+def _mapear_grupo_etario_mec(val) -> str:
+    """
+    Toma rangos del MEC (ej. '45 a 49 años', '70+') y los convierte
+    a los 8 grupos estándar de nuestra dimensión de Data Warehouse.
+    """
+    val_str = str(val).strip().lower()
+    
+    if "< 1" in val_str or "menor" in val_str: 
+        return "< 1 anio"
+        
+    nums = re.findall(r'\d+', val_str)
+    if not nums: 
+        return "No especificado"
+        
+    min_age = int(nums[0])
+    
+    if min_age < 1:   return "< 1 anio"
+    elif min_age < 5:  return "1-4"
+    elif min_age < 15: return "5-14"
+    elif min_age < 30: return "15-29"
+    elif min_age < 45: return "30-44"
+    elif min_age < 60: return "45-59"
+    else:              return "60 o mas"
 
-def load_fact_morbimortalidad_mec(sandbox_url: str, dw_local_url: str, dw_cloud_url: str = None):
-    print_log("Conectando...")
+def load_fact_morbimortalidad_mec(sandbox_url: str, dw_url: str):
+    print_log("Conectando a las bases de datos...")
     engine_sandbox  = create_engine(sandbox_url,  pool_pre_ping=True)
-    engine_dw_local = create_engine(dw_local_url, pool_pre_ping=True)
+    engine_dw       = create_engine(dw_url, pool_pre_ping=True)
 
-    # 1. Leer Stage
-    print_log("Leyendo stage.stage_mspas_mec...")
-    df = pd.read_sql("SELECT * FROM stage.stage_mspas_mec", engine_sandbox)
-    print_log(f"  -> {len(df):,} filas leidas.")
-    print_log(f"  Columnas: {list(df.columns)}")
+    # 1. LECTURA Y AGREGACIÓN DESDE STAGE (Con Filtro 2015)
+    print_log("Leyendo y agregando stage.stage_mspas_mec (Solo 2015 en adelante)...")
+    query = """
+        SELECT
+            anio,
+            departamento,
+            municipio,
+            codigo_cie10,
+            grupo_etario,
+            sexo,
+            periodo,
+            SUM(casos) AS casos
+        FROM stage.stage_mspas_mec
+        WHERE anio IS NOT NULL AND anio >= 2015
+        GROUP BY anio, departamento, municipio, codigo_cie10, grupo_etario, sexo, periodo
+    """
+    df = pd.read_sql(query, engine_sandbox)
+    print_log(f"  -> {len(df):,} filas agregadas desde el Stage (2015+).")
 
-    # 2. Cargar dimensiones
-    print_log("Cargando dimensiones para lookup...")
-    dim_tiempo   = pd.read_sql("SELECT * FROM dw.dim_tiempo",        engine_dw_local)
-    dim_geo      = pd.read_sql("SELECT * FROM dw.dim_geografia_gt",  engine_dw_local)
-    dim_causa    = pd.read_sql("SELECT * FROM dw.dim_causa_cie10",   engine_dw_local)
-    dim_etario   = pd.read_sql("SELECT * FROM dw.dim_grupo_etario",  engine_dw_local)
-    dim_sexo     = pd.read_sql("SELECT * FROM dw.dim_sexo",          engine_dw_local)
-    dim_fuente   = pd.read_sql("SELECT * FROM dw.dim_fuente",        engine_dw_local)
+    # 2. LECTURA DE DIMENSIONES (Para hacer el Lookup)
+    print_log("Cargando dimensiones maestras a memoria RAM...")
+    dim_tiempo   = pd.read_sql("SELECT id_tiempo, anio, mes FROM dw.dim_tiempo", engine_dw)
+    dim_geo      = pd.read_sql("SELECT id_geografia, nombre_departamento, nombre_municipio FROM dw.dim_geografia_gt", engine_dw)
+    dim_causa    = pd.read_sql("SELECT id_causa, codigo_cie10 FROM dw.dim_causa_cie10", engine_dw)
+    dim_etario   = pd.read_sql("SELECT id_grupo_etario, rango FROM dw.dim_grupo_etario", engine_dw)
 
-    # 3. Resolver id_tiempo (por anio, sin mes)
-    print_log("Resolviendo id_tiempo...")
-    dim_t = dim_tiempo[dim_tiempo["mes"].isna()][["id_tiempo","anio"]].copy()
+    # 3. LIMPIEZA DE PRE-JOIN (Alineando llaves)
+    print_log("Alineando llaves para garantizar exactitud en el JOIN...")
+    
+    # Tiempo: Convertir el mes a 0 para que haga match con los registros anuales de la dimensión
     df["anio"] = pd.to_numeric(df["anio"], errors="coerce").astype("Int16")
-    df = df.merge(dim_t, on="anio", how="left")
-
-    # 4. Resolver id_geografia_gt (por depto + municipio)
-    print_log("Resolviendo id_geografia...")
-    df["departamento"] = df["departamento"].astype(str).str.strip().str.upper()
-    df["municipio"]    = df["municipio"].astype(str).str.strip().str.upper()
-    dim_geo["depto_upper"] = dim_geo["nombre_departamento"].str.upper()
-    dim_geo["muni_upper"]  = dim_geo["nombre_municipio"].str.upper()
-    df = df.merge(
-        dim_geo[["id_geografia","depto_upper","muni_upper"]],
-        left_on=["departamento","municipio"],
-        right_on=["depto_upper","muni_upper"],
-        how="left"
-    )
-
-    # 5. Resolver id_causa (por codigo CIE-10)
-    print_log("Resolviendo id_causa...")
+    df["mes"]  = 0
+    df["mes"]  = df["mes"].astype("Int16")
+    dim_tiempo["anio"] = dim_tiempo["anio"].astype("Int16")
+    dim_tiempo["mes"]  = dim_tiempo["mes"].astype("Int16")
+    
+    # Geografía: Limpieza estricta de espacios
+    df["departamento"] = df["departamento"].fillna("Ignorado").astype(str).str.strip()
+    df["municipio"]    = df["municipio"].fillna("Ignorado").astype(str).str.strip()
+    
+    # Causa CIE-10
     df["codigo_cie10"] = df["codigo_cie10"].astype(str).str.strip().str.upper()
-    dim_causa["codigo_cie10_upper"] = dim_causa["codigo_cie10"].str.upper()
-    df = df.merge(
-        dim_causa[["id_causa","codigo_cie10_upper"]],
-        left_on="codigo_cie10",
-        right_on="codigo_cie10_upper",
-        how="left"
-    )
 
-    # 6. Resolver id_grupo_etario
-    print_log("Resolviendo id_grupo_etario...")
-    df["grupo_etario"] = df["grupo_etario"].astype(str).str.strip()
-    df = df.merge(
-        dim_etario[["id_grupo_etario","rango"]],
-        left_on="grupo_etario",
-        right_on="rango",
-        how="left"
-    )
+    # Sexo: Mapeo manual directo a ID
+    mapa_sexo = {"Mujer": 1, "Femenino": 1, "Hombre": 2, "Masculino": 2}
+    df["id_sexo"] = df["sexo"].map(mapa_sexo).fillna(3).astype(int)
 
-    # 7. Resolver id_sexo
-    print_log("Resolviendo id_sexo...")
-    df["sexo"] = df["sexo"].astype(str).str.strip().str.upper()
-    dim_sexo["codigo_upper"] = dim_sexo["codigo"].str.upper()
-    df = df.merge(
-        dim_sexo[["id_sexo","codigo_upper"]],
-        left_on="sexo",
-        right_on="codigo_upper",
-        how="left"
-    )
+    # Grupo Etario: Transformación mediante Regex
+    df["rango_std"] = df["grupo_etario"].apply(_mapear_grupo_etario_mec)
 
-    # 8. Resolver id_fuente — MSPAS_MEC = id 2
+    # Fuente: Asignación fija para el MSPAS MEC (ID 2)
     df["id_fuente"] = 2
 
-    # 9. Construir fact
-    print_log("Ensamblando fact_morbimortalidad_mec...")
+    # 4. LOS MERGES (Calculando Foreign Keys)
+    print_log("Cruzando Stage con Dimensiones (Calculando Foreign Keys)...")
+    
+    df = df.merge(dim_tiempo, on=["anio", "mes"], how="left")
+    
+    df = df.merge(dim_geo,
+                  left_on=["departamento", "municipio"],
+                  right_on=["nombre_departamento", "nombre_municipio"], how="left")
+                  
+    df = df.merge(dim_causa, on="codigo_cie10", how="left")
+    
+    df = df.merge(dim_etario, left_on="rango_std", right_on="rango", how="left")
+    df["id_grupo_etario"] = df["id_grupo_etario"].fillna(8).astype(int) # 8 = No especificado
+
+    # Validación Estricta de Nulos
+    nulos = df[["id_tiempo", "id_geografia", "id_causa", "id_grupo_etario"]].isna().sum().to_dict()
+    print_log(f"Validación de Integridad Referencial (Nulos en FKs): {nulos}")
+    
+    # 5. CONSTRUCCIÓN FINAL DE LA TABLA DE HECHOS
     df_fact = pd.DataFrame({
-        "id_tiempo":       df["id_tiempo"].astype("Int64"),
-        "id_geografia":    df["id_geografia"].astype("Int64"),
-        "id_causa":        df["id_causa"].astype("Int64"),
-        "id_grupo_etario": df["id_grupo_etario"].astype("Int64"),
-        "id_sexo":         df["id_sexo"].astype("Int64"),
-        "id_fuente":       df["id_fuente"].astype(int),
+        "id_tiempo":       df["id_tiempo"],
+        "id_geografia":    df["id_geografia"],
+        "id_causa":        df["id_causa"],
+        "id_grupo_etario": df["id_grupo_etario"],
+        "id_sexo":         df["id_sexo"],
+        "id_fuente":       df["id_fuente"],
         "casos":           pd.to_numeric(df["casos"], errors="coerce").fillna(0).astype(int),
+        "periodo":         df["periodo"],
         "fecha_carga":     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     })
 
-    nulos = df_fact[["id_tiempo","id_geografia","id_causa"]].isna().sum()
-    print_log(f"  Nulos FK: {nulos.to_dict()}")
-    print_log(f"Cargando {len(df_fact):,} registros...")
+    # Evitar romper Constraints eliminando huérfanos si existieran
+    df_fact = df_fact.dropna(subset=["id_tiempo", "id_geografia", "id_causa"])
+    
+    # Casting entero estricto para las Foreign Keys
+    df_fact["id_tiempo"]       = df_fact["id_tiempo"].astype(int)
+    df_fact["id_geografia"]    = df_fact["id_geografia"].astype(int)
+    df_fact["id_causa"]        = df_fact["id_causa"].astype(int)
 
-    _cargar_fact(create_engine(dw_local_url, pool_pre_ping=True), df_fact, "LOCAL")
-    if dw_cloud_url:
-        _cargar_fact(create_engine(dw_cloud_url, pool_pre_ping=True), df_fact, "NUBE")
-    else:
-        print_log("DW_CLOUD_URL no configurada — omitiendo nube.")
+    # 6. INYECCIÓN
+    _cargar_fact(engine_dw, df_fact, "LOCAL")
 
     engine_sandbox.dispose()
-    engine_dw_local.dispose()
-    print_log("CARGA EXITOSA — fact_morbimortalidad_mec")
-
+    engine_dw.dispose()
+    print_log("=" * 60)
+    print_log("CARGA A DATA WAREHOUSE EXITOSA — fact_morbimortalidad_mec")
+    print_log("=" * 60)
 
 if __name__ == "__main__":
     print_log("=" * 60)
-    print_log("INICIANDO JOB: load_fact_morbimortalidad_mec")
+    print_log("INICIANDO JOB LOCAL: Carga Fact Morbimortalidad MEC")
     print_log("=" * 60)
+    
     env_path = Path(__file__).resolve().parents[2] / ".env"
-    if not env_path.exists(): env_path = Path(".env")
+    if not env_path.exists(): 
+        env_path = Path(".env")
+        
     load_dotenv(env_path)
-    sandbox_url  = os.getenv("SANDBOX_DB_URL")
-    dw_local_url = os.getenv("DW_DB_URL")
-    dw_cloud_url = os.getenv("DW_CLOUD_URL")
+    
+    sandbox_url = os.getenv("SANDBOX_DB_URL")
+    dw_url      = os.getenv("DW_DB_URL")
+    
     if not sandbox_url:  raise EnvironmentError("SANDBOX_DB_URL no encontrada.")
-    if not dw_local_url: raise EnvironmentError("DW_DB_URL no encontrada.")
-    load_fact_morbimortalidad_mec(sandbox_url, dw_local_url, dw_cloud_url)
+    if not dw_url:       raise EnvironmentError("DW_DB_URL no encontrada.")
+    
+    load_fact_morbimortalidad_mec(sandbox_url, dw_url)
