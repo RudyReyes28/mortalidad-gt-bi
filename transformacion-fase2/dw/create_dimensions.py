@@ -345,6 +345,73 @@ def _build_dim_fuente() -> pd.DataFrame:
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# DDL explícito de cada dimensión (con PRIMARY KEY para soportar FK de facts)
+# ────────────────────────────────────────────────────────────────────────────
+DDL_DIMENSIONES = {
+    "dim_tiempo": """
+        CREATE TABLE IF NOT EXISTS dw.dim_tiempo (
+            id_tiempo   INTEGER PRIMARY KEY,
+            anio        SMALLINT,
+            mes         SMALLINT,
+            trimestre   SMALLINT,
+            periodo     TEXT
+        )""",
+    "dim_geografia_gt": """
+        CREATE TABLE IF NOT EXISTS dw.dim_geografia_gt (
+            id_geografia            INTEGER PRIMARY KEY,
+            nombre_departamento     TEXT,
+            nombre_municipio        TEXT,
+            codigo_departamento     TEXT,
+            codigo_municipio        TEXT,
+            region                  TEXT,
+            pais                    TEXT,
+            iso3c                   TEXT,
+            fecha_inicio_vigencia   TEXT,
+            fecha_fin_vigencia      TEXT,
+            es_version_actual       BOOLEAN,
+            version                 INTEGER
+        )""",
+    "dim_geografia_mundial": """
+        CREATE TABLE IF NOT EXISTS dw.dim_geografia_mundial (
+            id_geografia_mundial    INTEGER PRIMARY KEY,
+            nombre_pais             TEXT,
+            iso3c                   TEXT,
+            iso2                    TEXT,
+            region                  TEXT
+        )""",
+    "dim_causa_cie10": """
+        CREATE TABLE IF NOT EXISTS dw.dim_causa_cie10 (
+            id_causa        INTEGER PRIMARY KEY,
+            codigo_cie10    TEXT,
+            descripcion     TEXT,
+            capitulo_cie10  TEXT,
+            categoria       TEXT
+        )""",
+    "dim_sexo": """
+        CREATE TABLE IF NOT EXISTS dw.dim_sexo (
+            id_sexo     INTEGER PRIMARY KEY,
+            codigo      TEXT,
+            descripcion TEXT
+        )""",
+    "dim_grupo_etario": """
+        CREATE TABLE IF NOT EXISTS dw.dim_grupo_etario (
+            id_grupo_etario INTEGER PRIMARY KEY,
+            rango           TEXT,
+            edad_min        DOUBLE PRECISION,
+            edad_max        DOUBLE PRECISION
+        )""",
+    "dim_fuente": """
+        CREATE TABLE IF NOT EXISTS dw.dim_fuente (
+            id_fuente           INTEGER PRIMARY KEY,
+            nombre              TEXT,
+            tipo                TEXT,
+            pais_cobertura      TEXT,
+            cobertura_temporal  TEXT
+        )""",
+}
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Carga a un destino DW
 # ────────────────────────────────────────────────────────────────────────────
 def _cargar_dimensiones(engine_dw, tablas: list, destino: str):
@@ -352,11 +419,15 @@ def _cargar_dimensiones(engine_dw, tablas: list, destino: str):
         conn.execute(text("CREATE SCHEMA IF NOT EXISTS dw"))
 
     for nombre_tabla, df in tablas:
+        ddl = DDL_DIMENSIONES[nombre_tabla]
+        with engine_dw.begin() as conn:
+            conn.execute(text(ddl))
+            conn.execute(text(f"TRUNCATE TABLE dw.{nombre_tabla} RESTART IDENTITY CASCADE"))
         df.to_sql(
             name=nombre_tabla,
             con=engine_dw,
             schema="dw",
-            if_exists="replace",
+            if_exists="append",
             index=False,
             chunksize=1000,
             method="multi",

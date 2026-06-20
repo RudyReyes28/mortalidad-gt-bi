@@ -25,12 +25,12 @@ def _cargar_fact(engine_dw, df_fact: pd.DataFrame, destino: str):
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS dw.fact_defunciones_gt (
                 id_defuncion    BIGSERIAL PRIMARY KEY,
-                id_tiempo       INTEGER,
-                id_geografia    INTEGER,
-                id_causa        INTEGER,
-                id_sexo         INTEGER,
-                id_grupo_etario INTEGER,
-                id_fuente       INTEGER,
+                id_tiempo       INTEGER REFERENCES dw.dim_tiempo(id_tiempo) ON DELETE CASCADE,
+                id_geografia    INTEGER REFERENCES dw.dim_geografia_gt(id_geografia) ON DELETE CASCADE,
+                id_causa        INTEGER REFERENCES dw.dim_causa_cie10(id_causa) ON DELETE CASCADE,
+                id_sexo         INTEGER REFERENCES dw.dim_sexo(id_sexo) ON DELETE CASCADE,
+                id_grupo_etario INTEGER REFERENCES dw.dim_grupo_etario(id_grupo_etario) ON DELETE CASCADE,
+                id_fuente       INTEGER REFERENCES dw.dim_fuente(id_fuente) ON DELETE CASCADE,
                 total_casos     BIGINT,
                 periodo         VARCHAR(20),
                 fecha_carga     VARCHAR(30)

@@ -26,9 +26,9 @@ def _cargar_fact(engine_dw, df_fact, destino):
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS dw.fact_covid_mundial (
                 id_fact              BIGSERIAL PRIMARY KEY,
-                id_tiempo            INTEGER,
-                id_geografia_mundial INTEGER,
-                id_fuente            INTEGER,
+                id_tiempo            INTEGER REFERENCES dw.dim_tiempo(id_tiempo) ON DELETE CASCADE,
+                id_geografia_mundial INTEGER REFERENCES dw.dim_geografia_mundial(id_geografia_mundial) ON DELETE CASCADE,
+                id_fuente            INTEGER REFERENCES dw.dim_fuente(id_fuente) ON DELETE CASCADE,
                 new_cases_mes        BIGINT,
                 new_deaths_mes       BIGINT,
                 cum_cases_fin        BIGINT,

@@ -26,10 +26,10 @@ def _cargar_fact(engine_dw, df_fact, destino):
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS dw.fact_mortalidad_covid_gt (
                 id_fact         BIGSERIAL PRIMARY KEY,
-                id_tiempo       INTEGER,
-                id_geografia    INTEGER,
-                id_causa        INTEGER,
-                id_fuente       INTEGER,
+                id_tiempo       INTEGER REFERENCES dw.dim_tiempo(id_tiempo) ON DELETE CASCADE,
+                id_geografia    INTEGER REFERENCES dw.dim_geografia_gt(id_geografia) ON DELETE CASCADE,
+                id_causa        INTEGER REFERENCES dw.dim_causa_cie10(id_causa) ON DELETE CASCADE,
+                id_fuente       INTEGER REFERENCES dw.dim_fuente(id_fuente) ON DELETE CASCADE,
                 fallecidos      BIGINT,
                 tasa_por_100k   NUMERIC(10,4),
                 periodo         VARCHAR(20),
