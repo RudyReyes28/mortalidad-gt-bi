@@ -111,6 +111,9 @@ def _build_dim_tiempo(engine_sandbox) -> pd.DataFrame:
         "SELECT DISTINCT anio, NULL::smallint AS mes FROM stage.stage_mspas_mec WHERE anio IS NOT NULL",
         "SELECT DISTINCT anio, mes FROM stage.stage_mspas_covid WHERE anio IS NOT NULL",
         "SELECT DISTINCT anio_ocurrencia AS anio, mes_ocurrencia AS mes FROM stage.stage_defunciones_gt WHERE anio_ocurrencia IS NOT NULL",
+        # Mensuales de world mortality
+        "SELECT DISTINCT anio, mes FROM stage.stage_mortalidad_mundial WHERE anio IS NOT NULL AND mes IS NOT NULL",
+        # Anuales/semanales de world mortality — solo anio, mes NULL
         "SELECT DISTINCT anio, NULL::smallint AS mes FROM stage.stage_mortalidad_mundial WHERE anio IS NOT NULL",
         "SELECT DISTINCT anio, mes FROM stage.stage_covid_mundial WHERE anio IS NOT NULL",
     ]
@@ -212,11 +215,11 @@ def _build_dim_geografia_mundial(engine_sandbox) -> pd.DataFrame:
     """
     print_log("Construyendo dim_geografia_mundial...")
 
-    # Desde stage_mortalidad_mundial (tiene iso3c)
+    # Desde stage_mortalidad_mundial (tiene iso3c y country_name)
     q_mundial = """
-        SELECT DISTINCT pais AS nombre_pais, iso3c
+        SELECT DISTINCT country_name AS nombre_pais, iso3c
         FROM stage.stage_mortalidad_mundial
-        WHERE pais IS NOT NULL AND iso3c IS NOT NULL
+        WHERE country_name IS NOT NULL AND iso3c IS NOT NULL
     """
     # Desde stage_covid_mundial (tiene country_code = ISO2)
     q_covid = """

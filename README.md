@@ -86,7 +86,7 @@ Correr cada transformación en el siguiente orden:
 python transform_ine.py                  # sandbox_ine -> stage.stage_defunciones_gt
 python transform_mspas_mec.py            # sandbox_mspas_mec -> stage.stage_mspas_mec
 python transform_mspas_covid.py          # sandbox_mspas_covid -> stage.stage_mspas_covid
-python transform_mortalidad_mundial.py   # sandbox_world_mortality + sandbox_centroamerica -> stage.stage_mortalidad_mundial
+python transform_mort_mundial.py         # sandbox_world_mortality + sandbox_centroamerica -> stage.stage_mortalidad_mundial
 python transform_covid_mundial.py        # sandbox_covid_mundial -> stage.stage_covid_mundial
 ```
 

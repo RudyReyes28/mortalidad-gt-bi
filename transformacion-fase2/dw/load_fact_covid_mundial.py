@@ -38,6 +38,9 @@ def _cargar_fact(engine_dw, df_fact, destino):
                 fecha_carga          VARCHAR(30)
             )
         """))
+    with engine_dw.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE dw.fact_covid_mundial RESTART IDENTITY"))
+    print_log(f"  [{destino}] Tabla dw.fact_covid_mundial truncada.")
     df_fact.to_sql(
         name="fact_covid_mundial",
         con=engine_dw, schema="dw",

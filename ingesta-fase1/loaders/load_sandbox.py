@@ -32,6 +32,7 @@ TABLAS_PERMITIDAS = {
     # MSPAS — fuentes Eiler
     "mspas_mec":        "sandbox_mspas_mec",        # Enfermedades crónicas 2012-2024
     "mspas_covid":      "sandbox_mspas_covid",       # Fallecidos COVID-19 2020-2024
+    "covid_mundial":    "sandbox_covid_mundial",      # OMS COVID Mundial casos y muertes
 }
 
 
