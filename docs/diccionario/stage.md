@@ -110,3 +110,9 @@ Datos consolidados de Morbilidad y Mortalidad de Enfermedades Crónicas en Guate
 | `periodo` | `text` | Clasificación temporal: pre-COVID, COVID, post-COVID. |
 | `fuente_origen` | `text` | Identificador constante del job de origen. |
 | `fecha_carga` | `text` | Timestamp de ejecución del ETL. |
+
+## Diagrama de Entidad-Relación (Stage)
+
+Aquí se presenta la estructura gráfica de las tablas en la etapa de Stage:
+
+![Diagrama ERD Stage](img/ERD_Stage.png)
