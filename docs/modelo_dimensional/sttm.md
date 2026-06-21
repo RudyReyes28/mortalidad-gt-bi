@@ -53,3 +53,7 @@ Seleccione la pestaña correspondiente para visualizar la matriz de mapeo de cad
         allowfullscreen>
       </iframe>
     </div>
+
+
+## Enlace a la matriz de mapeo completa en Google Sheets:
+[Ir a Google Sheets](https://docs.google.com/spreadsheets/d/18vZXcFzjVrkcYrWV14P01gbMzK2Z1Lxhf-dGgy4OjYA/edit?usp=sharing)

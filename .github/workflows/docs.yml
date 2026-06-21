@@ -38,7 +38,7 @@ jobs:
           python-version: '3.x'
 
       - name: Instalar MkDocs Material
-        run: pip install mkdocs-material mkdocstrings mkdocstrings-python
+        run: pip install mkdocs-material mkdocstrings mkdocstrings-python mkdocs-table-reader-plugin
 
       - name: Construir sitio
         run: mkdocs build
