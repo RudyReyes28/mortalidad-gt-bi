@@ -1,0 +1,27 @@
+Source-to-Target Mapping — STM_MSPAS_MEC,,,,,,,,,,,,
+TARGET,,,,,,SOURCE,,,,,,
+"Mapping
+Change Date","Target
+Table","Target
+Column",Nullable,PK,"Data-type,
+Length","Source
+Table","Source
+Column","Data-type,
+Length
+(Source)","Expression /
+Transformation","Default
+Value","TR
+Ref.","Error Types
+and Handling"
+2026-06-20,stage_mspas_mec,anio,NO,NO,SMALLINT,sandbox_mspas_mec,Año,Numeric,pd.to_numeric(errors='coerce'). Fuera de 2012-2024 --> fila descartada.,—,"TR-006, TR-008",Fuera de rango: descartar
+2026-06-20,stage_mspas_mec,departamento,YES,NO,VARCHAR(80),sandbox_mspas_mec,Departamento,VARCHAR,strip().title().,NULL,TR-009,Vacío --> NULL
+2026-06-20,stage_mspas_mec,municipio,YES,NO,VARCHAR(100),sandbox_mspas_mec,Municipio,VARCHAR,strip().title().,NULL,TR-009,Vacío -->  NULL
+2026-06-20,stage_mspas_mec,codigo_cie10,NO,NO,VARCHAR(10),sandbox_mspas_mec,CIE-10,VARCHAR,"strip().upper().replace(':',''). Nulos --> fila descartada.",—,TR-005,NULL: descartar fila
+2026-06-20,stage_mspas_mec,diagnostico,YES,NO,VARCHAR(255),sandbox_mspas_mec,Diagnóstico,VARCHAR,strip().title().,NULL,TR-009,Vacío -->  NULL
+2026-06-20,stage_mspas_mec,capitulo_cie10,YES,NO,VARCHAR(80),(calculado),codigo_cie10,—,Letra inicial del CIE-10 --> lookup en tabla CAPITULOS_CIE10. Sin match: 'Capítulo no identificado'.,Capítulo no identificado,TR-005,Sin match --> valor descriptivo
+2026-06-20,stage_mspas_mec,grupo_etario,YES,NO,VARCHAR(30),sandbox_mspas_mec,Grupo Etario,VARCHAR,strip(). Se mantiene valor original del source.,NULL,—,—
+2026-06-20,stage_mspas_mec,sexo,YES,NO,VARCHAR(20),sandbox_mspas_mec,Sexo,VARCHAR,"F --> 'Femenino', M --> 'Masculino'. Sin match/nulo --> 'No especificado'.",No especificado,TR-012,Sin match --> 'No especificado'
+2026-06-20,stage_mspas_mec,casos,YES,NO,INTEGER,sandbox_mspas_mec,Casos,Numeric,pd.to_numeric(errors='coerce').astype('Int64').,NULL,TR-008,NULL: permitido
+2026-06-20,stage_mspas_mec,periodo,YES,NO,VARCHAR(20),(calculado),anio,—,"<2020: 'pre-COVID', 2020-2021: 'COVID', >2021: 'post-COVID'.",Ignorado,TR-001,Parse error --> 'Ignorado'
+2026-06-20,stage_mspas_mec,fuente_origen,NO,NO,VARCHAR(30),(constante),—,—,Valor fijo: 'MSPAS_MEC_STAGE'.,MSPAS_MEC_STAGE,TR-007,—
+2026-06-20,stage_mspas_mec,fecha_carga,NO,NO,TIMESTAMP,(sistema),—,—,datetime.now() al momento de ejecución.,NOW(),TR-007,—

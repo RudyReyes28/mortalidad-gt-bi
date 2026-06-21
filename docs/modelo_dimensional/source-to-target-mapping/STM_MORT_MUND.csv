@@ -1,0 +1,32 @@
+Source-to-Target Mapping — STM_MORT_MUND,,,,,,,,,,,,
+TARGET,,,,,,SOURCE,,,,,,
+"Mapping
+Change Date","Target
+Table","Target
+Column",Nullable,PK,"Data-type,
+Length","Source
+Table","Source
+Column","Data-type,
+Length
+(Source)","Expression /
+Transformation","Default
+Value","TR
+Ref.","Error Types
+and Handling"
+2026-06-20,stage_mortalidad_mundial,iso3c,NO,NO,VARCHAR(5),"sandbox_world_mortality
+sandbox_centroamerica",iso3c / pais,VARCHAR,"WM: filtro a 35 países. CA: mapeo nombre --> iso3c (Panam --> PAN, Costa Rica --> CRI).",—,TR-013,País no mapeado: descartar
+2026-06-20,stage_mortalidad_mundial,country_name,YES,NO,VARCHAR(80),"sandbox_world_mortality
+sandbox_centroamerica",country_name / pais,VARCHAR,Valor directo según fuente.,—,—,—
+2026-06-20,stage_mortalidad_mundial,region,YES,NO,VARCHAR(30),(calculado),iso3c,—,Lookup en PAISES_SELECCIONADOS[iso3c][1]. CA: constante 'Centroamérica'.,—,TR-013,—
+2026-06-20,stage_mortalidad_mundial,anio,NO,NO,SMALLINT,"sandbox_world_mortality
+sandbox_centroamerica",year / anio,Numeric,Filtro: ≥2015. Cast a Int16.,—,TR-006,<2015: descartar fila
+2026-06-20,stage_mortalidad_mundial,mes,YES,NO,SMALLINT,sandbox_world_mortality,time,Numeric,Si time_unit='monthly': int(time). Si 'weekly': NULL. CA: siempre NULL (anual).,NULL,TR-016,—
+2026-06-20,stage_mortalidad_mundial,semana,YES,NO,SMALLINT,sandbox_world_mortality,time,Numeric,Si time_unit='weekly': int(time). Si 'monthly': NULL. CA: siempre NULL.,NULL,TR-016,—
+2026-06-20,stage_mortalidad_mundial,deaths,YES,NO,FLOAT,"sandbox_world_mortality
+sandbox_centroamerica",deaths / defunciones_general,Numeric,CA: NULL en defunciones_general --> fila descartada.,—,TR-008,NULL en CA: descartar fila
+2026-06-20,stage_mortalidad_mundial,time_unit,YES,NO,VARCHAR(10),sandbox_world_mortality,time_unit,VARCHAR,"WM: valor directo ('monthly','weekly'). CA: constante 'annual'.",annual,TR-016,—
+2026-06-20,stage_mortalidad_mundial,periodo,YES,NO,VARCHAR(20),(calculado),anio,—,"<2020: 'pre-COVID', 2020-2021: 'COVID', >2021: 'post-COVID'.",—,TR-001,—
+2026-06-20,stage_mortalidad_mundial,fuente,YES,NO,VARCHAR(30),(calculado),—,—,WM: 'WORLD_MORTALITY'. CA: valor de fuente_origen del source.,—,TR-007,—
+2026-06-20,stage_mortalidad_mundial,fuente_origen,YES,NO,VARCHAR(30),"sandbox_world_mortality
+sandbox_centroamerica",fuente_origen,VARCHAR,Heredado del sandbox. Indica sub-fuente exacta.,—,TR-007,—
+2026-06-20,stage_mortalidad_mundial,fecha_carga,NO,NO,TIMESTAMP,(sistema),—,—,datetime.now() al momento de ejecución.,NOW(),TR-007,—

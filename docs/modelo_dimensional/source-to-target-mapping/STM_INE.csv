@@ -1,0 +1,32 @@
+Source-to-Target Mapping — STM_INE,,,,,,,,,,,,
+TARGET,,,,,,SOURCE,,,,,,
+"Mapping
+Change Date","Target
+Table","Target
+Column",Nullable,PK,"Data-type,
+Length","Source
+Table","Source
+Column","Data-type,
+Length
+(Source)","Expression /
+Transformation","Default
+Value","TR
+Ref.","Error Types
+and Handling"
+2026-06-20,stage_defunciones_gt,anio_ocurrencia,NO,NO,SMALLINT,sandbox_ine,Añoocu,Numeric,Cast a Int16. Registros con año NULL son descartados.,—,"TR-001, TR-008",NULL: descartar fila
+2026-06-20,stage_defunciones_gt,mes_ocurrencia,YES,NO,SMALLINT,STM_Mortalidad_GT,Mesocu,Numeric,Cast a Int16.,NULL,—,NULL: permitido
+2026-06-20,stage_defunciones_gt,nombre_depto_registro,YES,NO,VARCHAR(100),sandbox_ine_diccionario,Depreg,Numeric,Lookup en diccionario variable='Departamento de registro'. Si no encontrado: 'Código no encontrado: X'.,Ignorado / No especificado,TR-004,Sin match: valor descriptivo
+2026-06-20,stage_defunciones_gt,nombre_muni_registro,YES,NO,VARCHAR(100),sandbox_ine_diccionario,Mupreg,Numeric,Lookup en diccionario variable='Municipio de registro'.,Ignorado / No especificado,TR-004,Sin match: valor descriptivo
+2026-06-20,stage_defunciones_gt,nombre_depto_ocurrencia,YES,NO,VARCHAR(100),sandbox_ine_diccionario,Depocu,Numeric,Lookup en diccionario variable='Departamento de ocurrencia'.,Ignorado / No especificado,TR-004,Sin match: valor descriptivo
+2026-06-20,stage_defunciones_gt,nombre_muni_ocurrencia,YES,NO,VARCHAR(100),sandbox_ine_diccionario,Mupocu,Numeric,Lookup en diccionario variable='Municipio de ocurrencia'.,Ignorado / No especificado,TR-004,Sin match: valor descriptivo
+2026-06-20,stage_defunciones_gt,pueblo_pertenencia,YES,NO,VARCHAR(100),sandbox_ine_diccionario,Puedif,Numeric,Lookup en diccionario variable='Pueblo de pertenencia del difunto(a)'.,Ignorado / No especificado,TR-004,Sin match: valor descriptivo
+2026-06-20,stage_defunciones_gt,sexo,YES,NO,VARCHAR(30),sandbox_ine_diccionario,Sexo,Numeric,Lookup en diccionario variable='Sexo del difunto(a)'.,Ignorado / No especificado,TR-004,Sin match: valor descriptivo
+2026-06-20,stage_defunciones_gt,edad_anios,YES,NO,FLOAT,sandbox_ine,Edadif + Perdif,Numeric,"Conversión según unidad: días/365, meses/12, años directo. Si Perdif no es 1/2/3: NULL.",NULL,TR-002,Perdif inválido --> NULL
+2026-06-20,stage_defunciones_gt,grupo_etario,YES,NO,VARCHAR(20),(calculado),edad_anios,—,"Clasificación: <1, 1-4, 5-14, 15-29, 30-44, 45-59, 60+. Si NULL: 'No especificado'.",No especificado,TR-003,NULL edad --> 'No especificado'
+2026-06-20,stage_defunciones_gt,codigo_cie10,NO,NO,VARCHAR(10),sandbox_ine,Caudef,VARCHAR,"Strip + upper(). Filas sin CIE-10 válido (regex ^[A-Z]\d{2,4}) son descartadas.",—,TR-005,Inválido: descartar fila
+2026-06-20,stage_defunciones_gt,descripcion_causa,YES,NO,VARCHAR(255),sandbox_ine_cie10,codigo_cie10,VARCHAR,Lookup en catálogo CIE-10 por código normalizado.,Sin descripción en catálogo,TR-005,Sin match --> texto informativo
+2026-06-20,stage_defunciones_gt,asistencia_medica,YES,NO,VARCHAR(80),sandbox_ine_diccionario,Asist,Numeric,Lookup en diccionario variable='Asistencia recibida'.,Ignorado / No especificado,TR-004,Sin match: valor descriptivo
+2026-06-20,stage_defunciones_gt,lugar_ocurrencia,YES,NO,VARCHAR(80),sandbox_ine_diccionario,Ocur,Numeric,Lookup en diccionario variable='Sitio de ocurrencia'.,Ignorado / No especificado,TR-004,Sin match: valor descriptivo
+2026-06-20,stage_defunciones_gt,periodo,YES,NO,VARCHAR(20),(calculado),Añoocu,—,"<2020: 'pre-COVID', 2020-2021: 'COVID', >2021: 'post-COVID'. Error: 'Ignorado'.",Ignorado,TR-001,Parse error --> 'Ignorado'
+2026-06-20,stage_defunciones_gt,fuente_origen,NO,NO,VARCHAR(30),(constante),—,—,Valor fijo: 'INE_STAGE'.,INE_STAGE,TR-007,—
+2026-06-20,stage_defunciones_gt,fecha_carga,NO,NO,TIMESTAMP,(sistema),—,—,datetime.now() al momento de ejecución del job.,NOW(),TR-007,—

@@ -1,0 +1,28 @@
+Source-to-Target Mapping — STM_MSPAS_COVID,,,,,,,,,,,,
+TARGET,,,,,,SOURCE,,,,,,
+"Mapping
+Change Date","Target
+Table","Target
+Column",Nullable,PK,"Data-type,
+Length","Source
+Table","Source
+Column","Data-type,
+Length
+(Source)","Expression /
+Transformation","Default
+Value","TR
+Ref.","Error Types
+and Handling"
+2026-06-20,stage_mspas_covid,fecha_fallecimiento,NO,NO,DATE,sandbox_mspas_covid,fecha_fallecimiento,VARCHAR,pd.to_datetime(). Nulos --> fila descartada. Fuera de 2020-2024 --> fila descartada.,—,"TR-006, TR-008",NULL: descartar fila; fuera de rango: descartar
+2026-06-20,stage_mspas_covid,anio,NO,NO,SMALLINT,(calculado),fecha_fallecimiento,DATE,dt.year extraído de fecha_fallecimiento.,—,TR-006,—
+2026-06-20,stage_mspas_covid,mes,NO,NO,SMALLINT,(calculado),fecha_fallecimiento,DATE,dt.month extraído de fecha_fallecimiento.,—,TR-006,—
+2026-06-20,stage_mspas_covid,departamento,YES,NO,VARCHAR(80),sandbox_mspas_covid,departamento,VARCHAR,strip().title() — normalización de mayúsculas.,NULL,TR-009,Vacío --> NULL
+2026-06-20,stage_mspas_covid,codigo_departamento,YES,NO,INTEGER,sandbox_mspas_covid,codigo_departamento,VARCHAR,pd.to_numeric(errors='coerce').astype('Int64').,NULL,—,No numérico --> NULL
+2026-06-20,stage_mspas_covid,municipio,YES,NO,VARCHAR(100),sandbox_mspas_covid,municipio,VARCHAR,"strip().title(). Deduplicación por (municipio, fecha_fallecimiento).",NULL,"TR-009, TR-010",Duplicado exacto: eliminar
+2026-06-20,stage_mspas_covid,codigo_municipio,YES,NO,INTEGER,sandbox_mspas_covid,codigo_municipio,VARCHAR,pd.to_numeric(errors='coerce').astype('Int64').,NULL,—,No numérico --> NULL
+2026-06-20,stage_mspas_covid,poblacion,YES,NO,INTEGER,sandbox_mspas_covid,poblacion,VARCHAR,pd.to_numeric(errors='coerce').astype('Int64').,NULL,—,No numérico --> NULL
+2026-06-20,stage_mspas_covid,fallecidos,NO,NO,INTEGER,sandbox_mspas_covid,fallecidos,VARCHAR,pd.to_numeric. Nulos o ≤0 --> fila descartada.,—,TR-008,NULL o ≤0: descartar fila
+2026-06-20,stage_mspas_covid,tasa_por_100k,YES,NO,FLOAT,(calculado),fallecidos + poblacion,—,"(fallecidos / poblacion) * 100,000. Si poblacion ≤0 o NULL: NULL.",NULL,TR-011,División por cero --> NULL
+2026-06-20,stage_mspas_covid,periodo,YES,NO,VARCHAR(20),(calculado),anio,—,"≤2021: 'COVID', >2021: 'post-COVID'. Error: 'Ignorado'.",Ignorado,TR-001,Parse error --> 'Ignorado'
+2026-06-20,stage_mspas_covid,fuente_origen,NO,NO,VARCHAR(30),(constante),—,—,Valor fijo: 'MSPAS_COVID_STAGE'.,MSPAS_COVID_STAGE,TR-007,—
+2026-06-20,stage_mspas_covid,fecha_carga,NO,NO,TIMESTAMP,(sistema),—,—,datetime.now() al momento de ejecución.,NOW(),TR-007,—
