@@ -1,4 +1,4 @@
-site_name: Documentación fase 1 - Extracción y Carga a Sandbox
+site_name: Documentación Data Warehouse - Proyecto PNUD
 site_description: Proyecto PNUD — Análisis Pre/Post COVID Guatemala
 site_author: Equipo SS2
 
@@ -29,33 +29,54 @@ plugins:
         python:
           paths: 
             - ingesta-fase1
+            - transformacion-fase2
           options:
             docstring_style: google
             show_source: true
 
 nav:
   - Inicio: index.md
-  - Fuentes de Datos:
-    - INE Guatemala: fuentes/ine.md
-    - World Mortality Dataset: fuentes/world-mortality.md
-    - Centroamérica: fuentes/centroamerica.md
-    - MSPAS Enfermedades Crónicas: fuentes/mspas-mec.md
-    - MSPAS Fallecidos COVID-19: fuentes/mspas-covid.md
-    - OMS (SharePoint): fuentes/oms.md
-  - Pipeline:
-    - Arquitectura: pipeline/arquitectura.md
-    - Ingesta: pipeline/ingesta.md
-    - Extractores:
-      - Google Drive (INE): pipeline/extractores/extract_gdrive.md
-      - AWS S3 (World Mortality): pipeline/extractores/extract_world_mortality_s3.md
-      - RDS Centroamérica: pipeline/extractores/extract_centroamerica_rds.md
-      - MSPAS Enfermedades Crónicas(Google Drive): pipeline/extractores/extract_mspas_mec.md
-      - MSPAS Fallecidos COVID-19(Google Drive): pipeline/extractores/extract_mspas_covid.md
-      - SharePoint Online (OMS): pipeline/extractores/extract_sharepoint.md
-    - Loaders:
-      - Sandbox: pipeline/loaders/load_sandbox.md
-  - Trazabilidad:
-    - Data Lineage: trazabilidad/data-lineage.md
-    - Solicitud RENAP: trazabilidad/renap/solicitud.md
-  - Diccionario de Datos: diccionario/sandbox.md
-  - Plan de Anonimización: anonimizacion/plan.md
+  
+  - Arquitectura Global:
+    - Diagrama de Despliegue (Draw.io): arquitectura/despliegue.md
+    - Arquitectura Híbrida (Nube/Local): arquitectura/hibrida.md
+    
+  - Fase 1 (Capa Bronce - Sandbox):
+    - Fuentes de Datos:
+      - INE Guatemala: fuentes/ine.md
+      - World Mortality Dataset: fuentes/world-mortality.md
+      - Centroamérica: fuentes/centroamerica.md
+      - MSPAS Enfermedades Crónicas: fuentes/mspas-mec.md
+      - MSPAS Fallecidos COVID-19: fuentes/mspas-covid.md
+      - OMS (SharePoint): fuentes/oms.md
+    - Pipeline de Ingesta:
+      - Ingesta Sandbox: pipeline/ingesta.md
+      - Extractores:
+        - Google Drive (INE): pipeline/extractores/extract_gdrive.md
+        - AWS S3 (World Mortality): pipeline/extractores/extract_world_mortality_s3.md
+        - RDS Centroamérica: pipeline/extractores/extract_centroamerica_rds.md
+        - MSPAS Enfermedades Crónicas: pipeline/extractores/extract_mspas_mec.md
+        - MSPAS Fallecidos COVID-19: pipeline/extractores/extract_mspas_covid.md
+        - SharePoint Online (OMS): pipeline/extractores/extract_sharepoint.md
+      - Loaders:
+        - Sandbox: pipeline/loaders/load_sandbox.md
+    - Diccionario Sandbox: diccionario/sandbox.md
+    - Trazabilidad y Cumplimiento:
+      - Data Lineage: trazabilidad/data-lineage.md
+      - Solicitud RENAP: trazabilidad/renap/solicitud.md
+      - Plan de Anonimización: anonimizacion/plan.md
+    
+  - Fase 2 (Capa Plata - Stage):
+    - Reglas de Transformación (Limpieza y Negocio): pipeline/transformacion_stage.md
+    - Source-To-Target Mapping: modelo_dimensional/sttm.md
+    - Diccionario y ERD Stage: diccionario/stage.md
+    
+  - Fase 3 (Capa Oro - Data Warehouse):
+    - Modelo Dimensional (Galaxy Schema): modelo_dimensional/galaxy_schema.md
+    - Diccionario Data Warehouse: diccionario/data_warehouse.md
+    
+  - Orquestación y Automatización:
+    - AWS Glue (Jobs ETL/ELT): orquestacion/aws_glue.md
+    - Idempotencia y Logging: orquestacion/trazabilidad.md
+    - Réplica y Backup (Local): orquestacion/backup_replica.md
+    
