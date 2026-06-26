@@ -24,7 +24,7 @@ El modelo no predice la cantidad exacta de muertes. El modelo clasifica cada obs
 
 ---
 
-## Evidencias para MkDocs
+## Evidencias
 
 
 ### Captura: conexión segura al Data Warehouse
