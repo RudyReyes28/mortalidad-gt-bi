@@ -8,3 +8,9 @@
 
 ## Enlace de la Propuesta Financiera
 - [Propuesta Financiera](https://docs.google.com/spreadsheets/d/1ENNBb4R2OLo4fIxFDm7IpTFkYx6lfW9fGwKrBdEv43Y/edit?usp=sharing)
+
+## Enlace de la presentación del entregable final
+- [Presentación del entregable final](https://docs.google.com/presentation/d/10taR1uSSpkGGDnrYwmIX72WWT2_bVl4uKl2LSa7TIus/edit?usp=sharing)
+
+## Enlace Informe Final de Consultoría
+- [Informe Final de Consultoría](https://docs.google.com/document/d/1a6HDNt8IOVmPl7txhwwPXgwxcA2TBDbHGnmtHpa-saU/edit?usp=sharing)
