@@ -2,7 +2,7 @@
 
 El siguiente diagrama de despliegue detalla la topología de la infraestructura, los entornos de ejecución y los protocolos de comunicación utilizados para el pipeline de datos end-to-end. 
 
-![Diagrama de Despliegue UML](img/diagrama_despliegue_v2.png)
+![Diagrama de Despliegue UML](img/diagrama_despliegue_final.png)
 
 ## Componentes de la Arquitectura
 
