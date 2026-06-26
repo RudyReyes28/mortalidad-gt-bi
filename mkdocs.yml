@@ -75,6 +75,9 @@ nav:
   - Fase 3 (Capa Oro - Data Warehouse):
     - Modelo Dimensional (Galaxy Schema): modelo_dimensional/galaxy_schema.md
     - Diccionario Data Warehouse: diccionario/data_warehouse.md
+    - Machine Learning:
+      - Exceso de Mortalidad Mundial: ML/ML_exceso_mortalidad_mundial_actualizado.md
+      - Exceso de Mortalidad GT por Departamento: ML/ML_exceso_mortalidad_gt_departamentos_actualizado.md
     
   - Orquestación y Automatización:
     - AWS Glue (Jobs ETL/ELT): orquestacion/aws_glue.md
